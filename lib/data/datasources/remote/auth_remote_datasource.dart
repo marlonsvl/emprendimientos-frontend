@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
-import 'package:EmprendeGastronLoja/core/errors/failures.dart';
+import 'package:emprendegastroloja/core/errors/failures.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../models/auth_model.dart';
 import '../local/auth_local_datasource.dart';

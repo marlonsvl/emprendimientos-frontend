@@ -1,4 +1,4 @@
-import 'package:EmprendeGastronLoja/core/constants/api_constants.dart';
+import 'package:emprendegastroloja/core/constants/api_constants.dart';
 import 'package:flutter/material.dart';
 import '../../../data/models/emprendimiento_model.dart';
 import '../../../data/datasources/remote/emprendimientos_remote_datasource.dart';
@@ -6,7 +6,7 @@ import '../../../data/datasources/local/emprendimientos_local_datasource.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../domain/repositories/emprendimientos_repository.dart';
 import 'emprendimiento_detail_page.dart';
-import 'package:EmprendeGastronLoja/domain/repositories/auth_repository.dart';
+import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
 
 class EmprendimientosSearchPage extends StatefulWidget {
   final AuthRepository authRepository;
