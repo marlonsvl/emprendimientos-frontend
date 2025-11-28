@@ -1,4 +1,4 @@
-import 'package:EmprendeGastronLoja/presentation/pages/main/emprendimientos_search_page.dart';
+import 'package:emprendegastroloja/presentation/pages/main/emprendimientos_search_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'injection_container.dart' as di;
@@ -10,7 +10,7 @@ import 'presentation/pages/auth/login_page.dart';
 import 'presentation/pages/auth/register_page.dart';
 import 'presentation/pages/auth/password_recovery_page.dart';
 import 'core/themes/app_theme.dart';
-import 'package:EmprendeGastronLoja/domain/repositories/auth_repository.dart';
+import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

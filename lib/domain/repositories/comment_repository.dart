@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:EmprendeGastronLoja/data/datasources/local/auth_local_datasource.dart';
+import 'package:emprendegastroloja/data/datasources/local/auth_local_datasource.dart';
 import 'package:http/http.dart' as http;
 import '../../data/models/comment_model.dart';
 

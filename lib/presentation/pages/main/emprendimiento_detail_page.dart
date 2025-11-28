@@ -1,8 +1,8 @@
-import 'package:EmprendeGastronLoja/core/constants/api_constants.dart';
-import 'package:EmprendeGastronLoja/data/datasources/local/auth_local_datasource.dart';
-import 'package:EmprendeGastronLoja/domain/repositories/auth_repository.dart';
-import 'package:EmprendeGastronLoja/domain/repositories/comment_repository.dart';
-import 'package:EmprendeGastronLoja/domain/usecases/auth/get_current_user_usecase.dart';
+import 'package:emprendegastroloja/core/constants/api_constants.dart';
+import 'package:emprendegastroloja/data/datasources/local/auth_local_datasource.dart';
+import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
+import 'package:emprendegastroloja/domain/repositories/comment_repository.dart';
+import 'package:emprendegastroloja/domain/usecases/auth/get_current_user_usecase.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
