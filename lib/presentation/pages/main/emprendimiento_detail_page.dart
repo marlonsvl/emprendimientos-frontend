@@ -741,10 +741,10 @@ Widget _buildLocationTabSafe() {
 
   // In _buildSliverAppBar() method, update the CarouselOptions:
 
+/*
   Widget _buildSliverAppBar() {
     // Combine main photo with gallery images
     final List<String> allImages = [
-      widget.emprendimiento.photoUrl,
       ...widget.emprendimiento.galleryUrls,
     ];
 
@@ -765,11 +765,7 @@ Widget _buildLocationTabSafe() {
                 height: 300,
                 viewportFraction: 1.0,
                 enableInfiniteScroll: allImages.length > 1,
-                autoPlay:
-                    false, // ❌ CHANGE THIS: Set to false for manual navigation
-                // autoPlayInterval: const Duration(seconds: 5), // ❌ REMOVE THIS
-                // autoPlayAnimationDuration: const Duration(milliseconds: 800), // ❌ REMOVE THIS
-                // autoPlayCurve: Curves.fastOutSlowIn, // ❌ REMOVE THIS
+                autoPlay: false, 
                 onPageChanged: (index, reason) {
                   setState(() {
                     _currentImageIndex = index;
@@ -969,6 +965,261 @@ Widget _buildLocationTabSafe() {
                           boxShadow: [
                             BoxShadow(
                               color: Colors.black.withOpacity(0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(
+            _isFavorited ? Icons.favorite : Icons.favorite_border,
+            color: _isFavorited ? Colors.red : Colors.white,
+          ),
+          onPressed: _toggleFavorite,
+        ),
+        IconButton(
+          icon: const Icon(Icons.share, color: Colors.white),
+          onPressed: _shareEmprendimiento,
+        ),
+      ],
+    );
+  } */
+
+ Widget _buildSliverAppBar() {
+    // Combine main photo with gallery images
+    final List<String> allImages = widget.emprendimiento.galleryUrls.
+                                    toSet().toList();
+    allImages[0] = allImages[0].replaceFirst("{", "");
+    allImages[allImages.length-1] = allImages[allImages.length-1].replaceFirst("}", "");
+    return SliverAppBar(
+      expandedHeight: 300,
+      floating: false,
+      pinned: true,
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      flexibleSpace: FlexibleSpaceBar(
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Carousel with all images
+            CarouselSlider(
+              carouselController: _carouselController,
+              options: CarouselOptions(
+                height: 300,
+                viewportFraction: 1.0,
+                enableInfiniteScroll: false,
+                autoPlay: false,
+                disableCenter: true, // ✅ ADD THIS: Disables Center widget wrapping
+                enlargeCenterPage: false, // ✅ ADD THIS: Disable enlargement
+                clipBehavior: Clip.none, // ✅ ADD THIS: Prevents clipping
+                onPageChanged: (index, reason) {
+                  setState(() {
+                    _currentImageIndex = index;
+                  });
+                },
+              ),
+              items: allImages.map((imageUrl) {
+                return Builder(
+                  builder: (BuildContext context) {
+                    return Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.restaurant,
+                                size: 64,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Imagen no disponible',
+                                style: TextStyle(color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          color: Colors.grey[300],
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+
+            // Gradient overlay
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.7),
+                  ],
+                ),
+              ),
+            ),
+
+            // Image counter and navigation arrows
+            if (allImages.isNotEmpty)
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Image counter
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.photo_library,
+                            color: Colors.white,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_currentImageIndex + 1}/${allImages.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Fullscreen button
+                    GestureDetector(
+                      onTap: () => _showFullscreenCarousel(allImages),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.fullscreen,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // Navigation arrows for manual control
+            if (allImages.isNotEmpty) ...[
+              // Left arrow
+              Positioned(
+                left: 16,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    icon: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    onPressed: () => _carouselController.previousPage(),
+                  ),
+                ),
+              ),
+              // Right arrow
+              Positioned(
+                right: 16,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    icon: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        shape: BoxShape.circle,
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      child: const Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    onPressed: () => _carouselController.nextPage(),
+                  ),
+                ),
+              ),
+            ],
+
+            // Carousel navigation dots
+            if (allImages.isNotEmpty)
+              Positioned(
+                bottom: 50,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: allImages.asMap().entries.map((entry) {
+                    return GestureDetector(
+                      onTap: () => _carouselController.animateToPage(entry.key),
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _currentImageIndex == entry.key
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.4),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.3),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
