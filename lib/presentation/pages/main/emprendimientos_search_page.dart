@@ -881,11 +881,11 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
   String _formatCategoryDisplay(String categoria) {
     // Convert text ratings to star symbols
     final starRatings = {
-      '5 estrellas': '⭐⭐⭐⭐⭐',
-      '4 estrellas': '⭐⭐⭐⭐',
+      //'5 estrellas': '⭐⭐⭐⭐⭐',
+      //'4 estrellas': '⭐⭐⭐⭐',
       '3 estrellas': '⭐⭐⭐',
       '2 estrellas': '⭐⭐',
-      '1 estrellas': '⭐',
+      '1 estrella': '⭐',
     };
     
     final lowerCategoria = categoria.toLowerCase();
@@ -905,20 +905,20 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
     switch (categoria.toLowerCase()) {
       case 'premium':
       case 'gold':
-      case '5 estrellas':
+      case '3 estrellas':
         return Colors.amber;
       case 'platinum':
-      case '4 estrellas':
+      case '2 estrellas':
         return Colors.purple;
       case 'silver':
-      case '3 estrellas':
+      case '1 estrella':
         return Colors.blueGrey;
       case 'bronze':
-      case '2 estrellas':
-        return Colors.orange;
-      case 'basic':
-      case '1 estrellas':
-        return Colors.green;
+      //case '2 estrellas':
+      //  return Colors.orange;
+      //case 'basic':
+      //case '1 estrellas':
+      //  return Colors.green;
       default:
         return Colors.grey;
     }
@@ -926,7 +926,7 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
 
   List<Emprendimiento> _getPremiumEmprendimientos() {
     return _filteredEmprendimientos
-        .where((e) => e.categoryPriority >= 4)
+        .where((e) => e.categoryPriority == 3)
         .toList();
   }
 
