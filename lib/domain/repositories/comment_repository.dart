@@ -11,7 +11,7 @@ class CommentRepository {
 
   Future<Map<String, String>> _getHeaders() async {
     final token = await localDataSource.getToken();
-    print("🔑 Using token: $token");
+    //print("🔑 Using token: $token");
     return {
       'Content-Type': 'application/json',
       if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
@@ -21,14 +21,14 @@ class CommentRepository {
   Future<List<Comment>> getComments(int emprendimientoId) async {
     try {
       final headers = await _getHeaders();
-      print("📡 Fetching comments for emprendimiento: $emprendimientoId");
+      //print("📡 Fetching comments for emprendimiento: $emprendimientoId");
 
       final response = await http.get(
         Uri.parse('$baseUrl/comments/$emprendimientoId/'),
         headers: headers,
       );
 
-      print("📥 Response status: ${response.statusCode}");
+      //print("📥 Response status: ${response.statusCode}");
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -52,7 +52,7 @@ class CommentRepository {
         );
       }
     } catch (e) {
-      print("❌ Error loading comments: $e");
+      //print("❌ Error loading comments: $e");
       throw Exception('Error loading comments: $e');
     }
   }
