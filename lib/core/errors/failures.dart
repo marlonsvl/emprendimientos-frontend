@@ -11,6 +11,7 @@ abstract class Failure extends Equatable {
 
 // General failures
 class ServerFailure extends Failure {
+  @override
   final String message;
   
   const ServerFailure([this.message = 'Server error occurred']);
@@ -20,6 +21,7 @@ class ServerFailure extends Failure {
 }
 
 class NetworkFailure extends Failure {
+  @override
   final String message;
   
   const NetworkFailure([this.message = 'Network connection failed']);
@@ -29,6 +31,7 @@ class NetworkFailure extends Failure {
 }
 
 class CacheFailure extends Failure {
+  @override
   final String message;
   
   const CacheFailure([this.message = 'Cache error occurred']);
@@ -38,6 +41,7 @@ class CacheFailure extends Failure {
 }
 
 class UnknownFailure extends Failure {
+  @override
   final String message;
   
   const UnknownFailure({this.message = 'An unknown error occurred'});
@@ -46,8 +50,9 @@ class UnknownFailure extends Failure {
   List<Object> get props => [message];
 }
 
-// Auth-specific failures
+
 class AuthFailure extends Failure {
+  @override
   final String message;
   
   const AuthFailure({required this.message});
@@ -128,6 +133,7 @@ class ProfileUpdateFailure extends AuthFailure {
 
 // Validation failures
 class ValidationFailure extends Failure {
+  @override
   final String message;
   final Map<String, String>? fieldErrors;
   
@@ -142,6 +148,7 @@ class ValidationFailure extends Failure {
 
 // Permission failures
 class PermissionFailure extends Failure {
+  @override
   final String message;
   
   const PermissionFailure({this.message = 'Permission denied'});
@@ -152,6 +159,7 @@ class PermissionFailure extends Failure {
 
 // File/Storage failures
 class StorageFailure extends Failure {
+  @override
   final String message;
   
   const StorageFailure({this.message = 'Storage operation failed'});
@@ -162,6 +170,7 @@ class StorageFailure extends Failure {
 
 // Timeout failures
 class TimeoutFailure extends Failure {
+  @override
   final String message;
   
   const TimeoutFailure({this.message = 'Operation timed out'});
@@ -172,6 +181,7 @@ class TimeoutFailure extends Failure {
 
 // Platform-specific failures
 class PlatformFailure extends Failure {
+  @override
   final String message;
   
   const PlatformFailure({required this.message});
@@ -182,8 +192,7 @@ class PlatformFailure extends Failure {
 
 // Biometric failures
 class BiometricFailure extends AuthFailure {
-  const BiometricFailure({String message = 'Biometric authentication failed'}) 
-      : super(message: message);
+  const BiometricFailure({super.message = 'Biometric authentication failed'});
 }
 
 class BiometricNotAvailableFailure extends AuthFailure {
@@ -198,8 +207,7 @@ class BiometricNotSetupFailure extends AuthFailure {
 
 // OAuth failures
 class OAuthFailure extends AuthFailure {
-  const OAuthFailure({String message = 'OAuth authentication failed'}) 
-      : super(message: message);
+  const OAuthFailure({super.message = 'OAuth authentication failed'});
 }
 
 class OAuthCancelledFailure extends AuthFailure {

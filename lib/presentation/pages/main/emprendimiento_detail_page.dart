@@ -3,6 +3,7 @@ import 'package:emprendegastroloja/data/datasources/local/auth_local_datasource.
 import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
 import 'package:emprendegastroloja/domain/repositories/comment_repository.dart';
 import 'package:emprendegastroloja/domain/usecases/auth/get_current_user_usecase.dart';
+import 'package:emprendegastroloja/presentation/pages/main/widgets/video_player_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,8 +46,8 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
   late AnimationController _fabAnimationController;
   late Animation<double> _fabAnimation;
 
-  // Add a key for the NestedScrollView to access its controllers
-  final GlobalKey<NestedScrollViewState> _nestedScrollKey = GlobalKey();
+  late final List<String> _allImages;
+  
 
   CommentRepository? _commentRepository;
   late final GetCurrentUserUseCase _getCurrentUserUseCase;
@@ -63,23 +64,21 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
   String? _errorMessage;
   int? _currentUserId;
 
+  final ValueNotifier<bool> _isLikedNotifier = ValueNotifier(false);
+  final ValueNotifier<int> _likesCountNotifier = ValueNotifier(0);
+  final ValueNotifier<bool> _isFavoritedNotifier = ValueNotifier(false);
+
+  
+
   @override
   void initState() {
     super.initState();
+    _allImages = widget.emprendimiento.galleryUrls
+      .map((url) => url.replaceAll(RegExp(r'[{}]'), '').trim())
+      .where((url) => url.isNotEmpty)
+      .toList();
     _setupControllers();
-
-    _player = CachedVideoPlayerPlus.networkUrl(
-      Uri.parse(
-        "https://res.cloudinary.com/djl0e1p6e/video/upload/v1762564764/samples/dance-2.mp4".replaceFirst('/upload/', '/upload/f_mp4/'),
-      ),
-      invalidateCacheIfOlderThan: const Duration(minutes: 69), // Nice!
-    );
-
-    _player.initialize().then((_) {
-      setState(() {});
-      _player.controller.play();
-    });
-
+    _initializeVideoPlayer();
     _initializeData();
     _carouselController = CarouselSliderController();
     _mapController = MapController();
@@ -92,27 +91,51 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
       });
     });
 
-    // Initialize repository immediately
     _initializeCommentRepository().then((repo) {
       _commentRepository = repo;
       _loadComments();
     });
+
+    _isLikedNotifier.value = widget.emprendimiento.isLikedByUser;
+    _likesCountNotifier.value = widget.emprendimiento.likesCount;
+    _isFavoritedNotifier.value = widget.emprendimiento.isFavoritedByUser;
+
   }
 
-  /*Future<void> _initializeVideo() async {
-  if (widget.emprendimiento.videoUrl == null) return;
-
-  _controllerVideo = VideoPlayerController.networkUrl(
-    Uri.parse("https://res.cloudinary.com/djl0e1p6e/video/upload/v1762564764/samples/dance-2.mp4".replaceFirst('/upload/', '/upload/f_mp4/')),
+  // Better initialization with proper error handling
+void _initializeVideoPlayer() {
+  if (!widget.emprendimiento.hasVideo) return;
+  
+  _player = CachedVideoPlayerPlus.networkUrl(
+    Uri.parse(
+      //widget.emprendimiento.videoUrl!.replaceFirst('/upload/', '/upload/f_mp4/'),
+      "https://res.cloudinary.com/djl0e1p6e/video/upload/v1762564764/samples/dance-2.mp4".replaceFirst('/upload/', '/upload/f_mp4/'),
+    ),
+    invalidateCacheIfOlderThan: const Duration(hours: 1),
   );
 
-  try {
-    await _controllerVideo.initialize();
+  _player.initialize().then((_) {
+    if (!mounted) return;
+    _player.controller.addListener(_controllerListener);
+    if (mounted) {
+      setState(() {});
+      _player.controller.play();
+    }
+  }).catchError((error) {
+    if (mounted) {
+      setState(() {
+        _errorMessage = 'Error al cargar video: ${error.toString()}';
+      });
+    }
+  });
+}
+
+  void _controllerListener() {
+  if (_player.controller.value.isInitialized) {
     setState(() {});
-  } catch (e) {
-    print("Video init error: $e");
   }
-}*/
+}
+
 
   @override
   void didChangeDependencies() {
@@ -162,7 +185,7 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
   }
 
   void _setupControllers() {
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
 
     _fabAnimationController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -194,41 +217,50 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
 
   @override
   void dispose() {
+    _player.controller.removeListener(_controllerListener);
+    _player.controller.pause();
+    _player.controller.dispose();
+
     _mapController?.dispose();
     _tabController.dispose();
-    //_scrollController.dispose();
-    _player.dispose();
     _fabAnimationController.dispose();
     _commentController.dispose();
+
+    _isLikedNotifier.dispose();
+    _likesCountNotifier.dispose();
+    _isFavoritedNotifier.dispose();
     super.dispose();
   }
+
+  
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: DefaultTabController(
-        length: 4,
-        child: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) {
-            return [
-              _buildSliverAppBar(),
-              _buildInfoHeader(),
-              SliverOverlapAbsorber(
-                handle: NestedScrollView.sliverOverlapAbsorberHandleFor(
-                  context,
+      body: NotificationListener<ScrollNotification>(
+        child: DefaultTabController(
+          length: 4,
+          child: NestedScrollView(
+            // NO controller here
+            headerSliverBuilder: (context, innerBoxIsScrolled) {
+              return [
+                _buildSliverAppBar(),
+                _buildInfoHeader(),
+                SliverOverlapAbsorber(
+                  handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+                  sliver: _buildTabBar(),
                 ),
-                sliver: _buildTabBar(),
-              ),
-            ];
-          },
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              _buildDetailsTabSafe(),
-              _buildMenuTab(),
-              _buildLocationTab(),
-              _buildReviewsTabSafe(),
-            ],
+              ];
+            },
+            body: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildDetailsTabSafe(),
+                //_buildMenuTab(),
+                _buildLocationTab(),
+                _buildReviewsTabSafe(),
+              ],
+            ),
           ),
         ),
       ),
@@ -241,6 +273,7 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
       builder: (context) {
         return CustomScrollView(
           key: const PageStorageKey<String>('details_tab'),
+          primary: false,
           slivers: [
             SliverOverlapInjector(
               handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
@@ -331,237 +364,56 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
     );
   }
 
-  // Safe wrapper for Menu tab
-  /*
-Widget _buildMenuTabSafe() {
-  return Builder(
-    builder: (context) {
-      return CustomScrollView(
-        key: const PageStorageKey<String>('menu_tab'),
-        slivers: [
-          SliverOverlapInjector(
-            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                if (widget.emprendimiento.hasMenu) ...[
-                  Text(
-                    'Menú',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      widget.emprendimiento.menu!,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-                  ),
-                ] else ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 40),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.restaurant_menu,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.outline,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Menú no disponible',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Contacta directamente para conocer el menú',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 24),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: _makePhoneCall,
-                                icon: const Icon(Icons.phone),
-                                label: const Text('Llamar'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: _sendWhatsApp,
-                                icon: const Icon(Icons.message),
-                                label: const Text('WhatsApp'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 24),
-                _buildSection('Tipo de Servicio', Icons.room_service, [
-                  _buildDetailText(widget.emprendimiento.tipoServicio),
-                ]),
-                // Add other sections...
-              ]),
-            ),
-          ),
-        ],
-      );
-    },
-  );
-}
-*/
 
-  // Safe wrapper for Location tab
-  /*
-Widget _buildLocationTabSafe() {
-  return Builder(
-    builder: (context) {
-      return CustomScrollView(
-        key: const PageStorageKey<String>('location_tab'),
-        slivers: [
-          SliverOverlapInjector(
-            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.all(20),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                // Your map and location content
-                Container(
-                  height: 300,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: LatLng(
-                        widget.emprendimiento.latitude,
-                        widget.emprendimiento.longitude,
-                      ),
-                      initialZoom: 15.0,
-                      minZoom: 5.0,
-                      maxZoom: 18.0,
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: _getMapTileUrl(),
-                        userAgentPackageName: 'com.example.emprendimientos',
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(
-                              widget.emprendimiento.latitude,
-                              widget.emprendimiento.longitude,
-                            ),
-                            width: 40,
-                            height: 40,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                              ),
-                              child: const Icon(
-                                Icons.restaurant,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // Add rest of location content...
-              ]),
-            ),
-          ),
-        ],
-      );
-    },
-  );
-}
-*/
-
-  // Safe wrapper for Reviews tab
   Widget _buildReviewsTabSafe() {
     return Builder(
-      builder: (context) {
-        return CustomScrollView(
-          key: const PageStorageKey<String>('reviews_tab'),
-          slivers: [
-            SliverOverlapInjector(
-              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-            ),
-            SliverToBoxAdapter(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+    builder: (context) {
+      return CustomScrollView(
+        key: const PageStorageKey<String>('reviews_tab'),
+        primary: false,
+        slivers: [
+          SliverOverlapInjector(
+            handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+          ),
+          
+          SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Rating display
+                  
+                  /*Row(
                     children: [
+                      Text(
+                        widget.emprendimiento.averageRating.toStringAsFixed(1),
+                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              widget.emprendimiento.averageRating
-                                  .toStringAsFixed(1),
-                              style: Theme.of(context).textTheme.displaySmall
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: List.generate(5, (index) {
                                 return Icon(
-                                  index <
-                                          widget.emprendimiento.averageRating
-                                              .floor()
+                                  index < widget.emprendimiento.averageRating.floor()
                                       ? Icons.star
-                                      : index <
-                                            widget.emprendimiento.averageRating
-                                      ? Icons.star_half
-                                      : Icons.star_border,
+                                      : index < widget.emprendimiento.averageRating
+                                          ? Icons.star_half
+                                          : Icons.star_border,
                                   color: Colors.amber,
                                   size: 18,
                                 );
                               }),
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 4),
                             Text(
                               '${widget.emprendimiento.ratingCount} reseñas',
                               style: Theme.of(context).textTheme.bodySmall,
@@ -569,437 +421,97 @@ Widget _buildLocationTabSafe() {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Align(
-                        alignment: Alignment.center,
-                        child: ElevatedButton.icon(
-                          onPressed: _showRatingDialog,
-                          icon: const Icon(Icons.rate_review, size: 16),
-                          label: const Text('Escribir'),
-                        ),
-                      ),
                     ],
+                  ),*/
+                  
+                  const SizedBox(height: 12),
+                  
+                  // Write button - full width
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showRatingDialog,
+                      icon: const Icon(Icons.rate_review, size: 16),
+                      label: const Text('Escribir reseña'),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
-            if (_isLoadingComments)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_comments.isEmpty)
-              SliverFillRemaining(
+          ),
+          
+          // Rest of the content (loading, empty, comments)
+          if (_isLoadingComments)
+            const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_comments.isEmpty)
+            SliverFillRemaining(
+              child: SingleChildScrollView( 
                 child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.comment,
-                        size: 64,
-                        color: Theme.of(context).colorScheme.outline,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No hay comentarios aún',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Sé el primero en dejar una reseña',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: _showRatingDialog,
-                        icon: const Icon(Icons.rate_review),
-                        label: const Text('Escribir primera reseña'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.all(16),
-                sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => _buildCommentCard(_comments[index]),
-                    childCount: _comments.length,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  /*Widget _buildSliverAppBar() {
-    return SliverAppBar(
-      expandedHeight: 300,
-      floating: false,
-      pinned: true,
-      elevation: 0,
-      backgroundColor: Colors.transparent,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Main image
-            Image.network(
-              widget.emprendimiento.photoUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.grey[300],
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.restaurant, size: 64, color: Colors.grey[600]),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Imagen no disponible',
-                        style: TextStyle(color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-
-            // Gradient overlay
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.7),
-                  ],
-                ),
-              ),
-            ),
-
-            // Gallery indicator
-            if (widget.emprendimiento.hasGallery)
-              Positioned(
-                bottom: 16,
-                right: 16,
-                child: GestureDetector(
-                  onTap: _showImageGallery,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.photo_library,
-                          color: Colors.white,
-                          size: 16,
+                        Icon(
+                          Icons.comment,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.outline,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(height: 16),
                         Text(
-                          '+${widget.emprendimiento.galleryUrls.length}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                          ),
+                          'No hay comentarios aún',
+                          style: Theme.of(context).textTheme.titleLarge,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sé el primero en dejar una reseña',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: _showRatingDialog,
+                          icon: const Icon(Icons.rate_review),
+                          label: const Text('Escribir primera reseña'),
                         ),
                       ],
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            _isFavorited ? Icons.favorite : Icons.favorite_border,
-            color: _isFavorited ? Colors.red : Colors.white,
-          ),
-          onPressed: _toggleFavorite,
-        ),
-        IconButton(
-          icon: const Icon(Icons.share, color: Colors.white),
-          onPressed: _shareEmprendimiento,
-        ),
-      ],
-    );
-  }*/
-
-  // In _buildSliverAppBar() method, update the CarouselOptions:
-
-/*
-  Widget _buildSliverAppBar() {
-    // Combine main photo with gallery images
-    final List<String> allImages = [
-      ...widget.emprendimiento.galleryUrls,
-    ];
-
-    return SliverAppBar(
-      expandedHeight: 300,
-      floating: false,
-      pinned: true,
-      elevation: 0,
-      backgroundColor: Colors.transparent,
-      flexibleSpace: FlexibleSpaceBar(
-        background: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Carousel with all images
-            CarouselSlider(
-              carouselController: _carouselController,
-              options: CarouselOptions(
-                height: 300,
-                viewportFraction: 1.0,
-                enableInfiniteScroll: allImages.length > 1,
-                autoPlay: false, 
-                onPageChanged: (index, reason) {
-                  setState(() {
-                    _currentImageIndex = index;
-                  });
-                },
-              ),
-              items: allImages.map((imageUrl) {
-                return Builder(
-                  builder: (BuildContext context) {
-                    return Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          color: Colors.grey[300],
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.restaurant,
-                                size: 64,
-                                color: Colors.grey[600],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Imagen no disponible',
-                                style: TextStyle(color: Colors.grey[600]),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(
-                          color: Colors.grey[300],
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              value: loadingProgress.expectedTotalBytes != null
-                                  ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                  : null,
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              }).toList(),
-            ),
-
-            // Gradient overlay
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.7),
-                  ],
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => _buildCommentCard(_comments[index]),
+                  childCount: _comments.length,
                 ),
               ),
             ),
+        ],
+      );
+    },
+  );
+  }
 
-            // Image counter and navigation arrows
-            if (allImages.length > 1)
-              Positioned(
-                bottom: 16,
-                right: 16,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Image counter
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.photo_library,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${_currentImageIndex + 1}/${allImages.length}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Fullscreen button
-                    GestureDetector(
-                      onTap: () => _showFullscreenCarousel(allImages),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.fullscreen,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
 
-            // ✅ ADD THESE: Navigation arrows for manual control
-            if (allImages.length > 1) ...[
-              // Left arrow
-              Positioned(
-                left: 16,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: IconButton(
-                    icon: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    onPressed: () => _carouselController.previousPage(),
-                  ),
-                ),
-              ),
-              // Right arrow
-              Positioned(
-                right: 16,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: IconButton(
-                    icon: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        shape: BoxShape.circle,
-                      ),
-                      padding: const EdgeInsets.all(8),
-                      child: const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                    onPressed: () => _carouselController.nextPage(),
-                  ),
-                ),
-              ),
-            ],
+  
 
-            // Carousel navigation dots (same as before)
-            if (allImages.length > 1)
-              Positioned(
-                bottom: 50,
-                left: 0,
-                right: 0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: allImages.asMap().entries.map((entry) {
-                    return GestureDetector(
-                      onTap: () => _carouselController.animateToPage(entry.key),
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _currentImageIndex == entry.key
-                              ? Colors.white
-                              : Colors.white.withValues(alpha: 0.4),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.3),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        IconButton(
-          icon: Icon(
-            _isFavorited ? Icons.favorite : Icons.favorite_border,
-            color: _isFavorited ? Colors.red : Colors.white,
-          ),
-          onPressed: _toggleFavorite,
-        ),
-        IconButton(
-          icon: const Icon(Icons.share, color: Colors.white),
-          onPressed: _shareEmprendimiento,
-        ),
-      ],
-    );
-  } */
+  
 
  Widget _buildSliverAppBar() {
     // Combine main photo with gallery images
-    final List<String> allImages = widget.emprendimiento.galleryUrls.
-                                    toSet().toList();
-    allImages[0] = allImages[0].replaceFirst("{", "");
-    allImages[allImages.length-1] = allImages[allImages.length-1].replaceFirst("}", "");
+    //final List<String> allImages = widget.emprendimiento.galleryUrls.
+    //                                toSet().toList();
+    //allImages[0] = allImages[0].replaceFirst("{", "");
+    //allImages[allImages.length-1] = allImages[allImages.length-1].replaceFirst("}", "");
     return SliverAppBar(
       expandedHeight: 300,
       floating: false,
@@ -1018,16 +530,16 @@ Widget _buildLocationTabSafe() {
                 viewportFraction: 1.0,
                 enableInfiniteScroll: false,
                 autoPlay: false,
-                disableCenter: true, // ✅ ADD THIS: Disables Center widget wrapping
-                enlargeCenterPage: false, // ✅ ADD THIS: Disable enlargement
-                clipBehavior: Clip.none, // ✅ ADD THIS: Prevents clipping
+                disableCenter: true,  
+                enlargeCenterPage: false, 
+                clipBehavior: Clip.none, 
                 onPageChanged: (index, reason) {
                   setState(() {
                     _currentImageIndex = index;
                   });
                 },
               ),
-              items: allImages.map((imageUrl) {
+              items: _allImages.map((imageUrl) {
                 return Builder(
                   builder: (BuildContext context) {
                     return Image.network(
@@ -1089,7 +601,7 @@ Widget _buildLocationTabSafe() {
             ),
 
             // Image counter and navigation arrows
-            if (allImages.isNotEmpty)
+            if (_allImages.isNotEmpty)
               Positioned(
                 bottom: 16,
                 right: 16,
@@ -1116,7 +628,7 @@ Widget _buildLocationTabSafe() {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '${_currentImageIndex + 1}/${allImages.length}',
+                            '${_currentImageIndex + 1}/${_allImages.length}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 12,
@@ -1129,7 +641,7 @@ Widget _buildLocationTabSafe() {
                     const SizedBox(width: 8),
                     // Fullscreen button
                     GestureDetector(
-                      onTap: () => _showFullscreenCarousel(allImages),
+                      onTap: () => _showFullscreenCarousel(_allImages),
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
@@ -1148,7 +660,7 @@ Widget _buildLocationTabSafe() {
               ),
 
             // Navigation arrows for manual control
-            if (allImages.isNotEmpty) ...[
+            if (_allImages.isNotEmpty) ...[
               // Left arrow
               Positioned(
                 left: 16,
@@ -1198,14 +710,14 @@ Widget _buildLocationTabSafe() {
             ],
 
             // Carousel navigation dots
-            if (allImages.isNotEmpty)
+            if (_allImages.isNotEmpty)
               Positioned(
                 bottom: 50,
                 left: 0,
                 right: 0,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: allImages.asMap().entries.map((entry) {
+                  children: _allImages.asMap().entries.map((entry) {
                     return GestureDetector(
                       onTap: () => _carouselController.animateToPage(entry.key),
                       child: Container(
@@ -1234,6 +746,20 @@ Widget _buildLocationTabSafe() {
         ),
       ),
       actions: [
+        ValueListenableBuilder<bool>(
+          valueListenable: _isFavoritedNotifier,
+          builder: (context, isFavorited, child) {
+            return IconButton(
+              icon: Icon(
+                isFavorited ? Icons.favorite : Icons.favorite_border,
+                color: isFavorited ? Colors.red : Colors.white,
+              ),
+              onPressed: _toggleFavorite,
+            );
+          },
+        ),
+        
+        /*
         IconButton(
           icon: Icon(
             _isFavorited ? Icons.favorite : Icons.favorite_border,
@@ -1244,7 +770,7 @@ Widget _buildLocationTabSafe() {
         IconButton(
           icon: const Icon(Icons.share, color: Colors.white),
           onPressed: _shareEmprendimiento,
-        ),
+        ),*/
       ],
     );
   }
@@ -1293,7 +819,7 @@ Widget _buildLocationTabSafe() {
                 ),
                 Column(
                   children: [
-                    _buildRatingDisplay(),
+                    //_buildRatingDisplay(),
                     const SizedBox(height: 4),
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -1416,7 +942,7 @@ Widget _buildLocationTabSafe() {
             const SizedBox(height: 12),
 
             // Like and comment stats
-            Row(
+            /*Row(
               children: [
                 IconButton(
                   onPressed: _toggleLike,
@@ -1435,7 +961,39 @@ Widget _buildLocationTabSafe() {
                 const SizedBox(width: 4),
                 Text('${_comments.length} comentarios'),
               ],
+            ),*/
+            Row(
+              children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: _isLikedNotifier,
+                  builder: (context, isLiked, child) {
+                    return IconButton(
+                      onPressed: _toggleLike,
+                      icon: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked ? Colors.red : null,
+                      ),
+                    );
+                  },
+                ),
+                ValueListenableBuilder<int>(
+                  valueListenable: _likesCountNotifier,
+                  builder: (context, likesCount, child) {
+                    return Text('$likesCount me gusta');
+                  },
+                ),
+                const SizedBox(width: 16),
+                Icon(
+                  Icons.comment,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 4),
+                Text('${_comments.length} comentarios'),
+              ],
             ),
+
+
           ],
         ),
       ),
@@ -1520,7 +1078,7 @@ Widget _buildLocationTabSafe() {
           isScrollable: true,
           tabs: const [
             Tab(text: 'Detalles', icon: Icon(Icons.info)),
-            Tab(text: 'Menú', icon: Icon(Icons.restaurant_menu)),
+            //Tab(text: 'Menú', icon: Icon(Icons.restaurant_menu)),
             Tab(text: 'Ubicación', icon: Icon(Icons.map)),
             Tab(text: 'Reseñas', icon: Icon(Icons.reviews)),
           ],
@@ -1529,286 +1087,8 @@ Widget _buildLocationTabSafe() {
     );
   }
 
-  /*
-  Widget _buildTabBarView() {
-    return TabBarView(
-      controller: _tabController,
-      children: [
-        _buildDetailsTab(),
-        _buildMenuTab(),
-        _buildLocationTab(),
-        _buildReviewsTab(),
-      ],
-    );
-  }*/
-
-  /*
-  Widget _buildDetailsTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Video section
-          if (widget.emprendimiento.hasVideo) _buildVideoSection(),
-
-          // Contact info section
-          _buildSection('Información de Contacto', Icons.contact_phone, [
-            _buildDetailRow('Teléfono', widget.emprendimiento.telefono),
-            _buildDetailRow('Email', widget.emprendimiento.email),
-            _buildDetailRow(
-              'Horario de atención',
-              widget.emprendimiento.horario,
-            ),
-          ]),
-
-          // Basic info section
-          _buildSection('Información General', Icons.info, [
-            _buildDetailRow(
-              'Tipo de turismo',
-              widget.emprendimiento.tipoTurismo,
-            ),
-            _buildDetailRow(
-              'Tipo de establecimiento',
-              widget.emprendimiento.tipo,
-            ),
-            _buildDetailRow(
-              'Años de experiencia',
-              '${widget.emprendimiento.experiencia} años',
-            ),
-            _buildDetailRow(
-              'Estado del local',
-              widget.emprendimiento.estadoLocal,
-            ),
-            if (widget.emprendimiento.mesas > 0)
-              _buildDetailRow(
-                'Número de mesas',
-                '${widget.emprendimiento.mesas}',
-              ),
-            _buildDetailRow(
-              'Capacidad total',
-              '${widget.emprendimiento.plazas} personas',
-            ),
-            _buildDetailRow('Baños disponibles', widget.emprendimiento.banio),
-            _buildDetailRow(
-              'Tiempo trabajando',
-              '${widget.emprendimiento.tiempoTrabajando} años',
-            ),
-          ]),
-
-          // Services section
-          if (widget.emprendimiento.serviciosProduccion.isNotEmpty)
-            _buildSection('Servicios y Producción', Icons.build, [
-              _buildDetailText(widget.emprendimiento.serviciosProduccion),
-            ]),
-
-          // Equipment section
-          if (widget.emprendimiento.equipos.isNotEmpty)
-            _buildSection('Equipos y Herramientas', Icons.kitchen, [
-              _buildDetailText(widget.emprendimiento.equipos),
-            ]),
-
-          // Complementary services
-          if (widget.emprendimiento.complementarios.isNotEmpty)
-            _buildSection('Servicios Complementarios', Icons.star, [
-              _buildDetailText(widget.emprendimiento.complementarios),
-            ]),
-
-          // Certifications section
-          _buildSection('Certificaciones y Permisos', Icons.verified, [
-            _buildDetailRow('RUC', widget.emprendimiento.ruc),
-            _buildDetailRow(
-              'Licencia GAD Loja',
-              widget.emprendimiento.licenciaGadLoja,
-            ),
-            _buildDetailRow('ARCSA', widget.emprendimiento.arcsa),
-            _buildDetailRow(
-              'Registro de Turismo',
-              widget.emprendimiento.turismo,
-            ),
-            _buildDetailRow('Asociación', widget.emprendimiento.asociacion),
-          ]),
-
-          // Social media section
-          if (widget.emprendimiento.socialMediaLinks.isNotEmpty)
-            _buildSection('Redes Sociales', Icons.share, [
-              Wrap(
-                spacing: 8,
-                children: widget.emprendimiento.socialMediaLinks.map((
-                  platform,
-                ) {
-                  return Chip(
-                    label: Text(platform),
-                    avatar: Icon(_getSocialIcon(platform), size: 16),
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.primaryContainer,
-                  );
-                }).toList(),
-              ),
-            ]),
-
-          // Staff section
-          _buildSection('Información del Personal', Icons.group, [
-            _buildDetailRow(
-              'Personal capacitado',
-              widget.emprendimiento.personalCapacitado,
-            ),
-            _buildDetailRow(
-              'Frecuencia de capacitación',
-              widget.emprendimiento.frecuenciaCapacitacion,
-            ),
-            if (widget.emprendimiento.numeroMujeres > 0 ||
-                widget.emprendimiento.numeroHombres > 0)
-              _buildDetailRow(
-                'Empleados',
-                '${widget.emprendimiento.numeroMujeres} mujeres, ${widget.emprendimiento.numeroHombres} hombres',
-              ),
-          ]),
-
-          // Owner information
-          _buildSection('Información del Propietario', Icons.person, [
-            _buildDetailRow('Género', widget.emprendimiento.genero),
-            _buildDetailRow('Edad', '${widget.emprendimiento.edad} años'),
-            _buildDetailRow('Estado civil', widget.emprendimiento.estadoCivil),
-            _buildDetailRow(
-              'Nivel de educación',
-              widget.emprendimiento.nivelEducacion,
-            ),
-            _buildDetailRow(
-              'Dependencia de ingresos',
-              widget.emprendimiento.dependenciaIngresos,
-            ),
-          ]),
-        ],
-      ),
-    );
-  }*/
-
   Widget _buildVideoSection() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.play_circle,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Video del Emprendimiento',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          Container(
-            height: 200,
-            width: double.infinity,
-            decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withValues(alpha: 0.2),
-                ),
-              ),
-            child: Center(
-              child: _player.isInitialized
-                  ? AspectRatio(
-                      aspectRatio: _player.controller.value.aspectRatio,
-                      child: VideoPlayer(
-                        _player.controller,
-                      ), // Note: VideoPlayer from video_player package!
-                    )
-                  : const CircularProgressIndicator.adaptive(),
-            ),
-          ),
-
-          /*
-          GestureDetector(
-            onTap: () {
-              if (_player.isInitialized) {
-                setState(() {
-                  if (_player.controller.value.isPlaying) {
-                    _player.controller.pause();
-                  } else {
-                    _player.controller.play();
-                  }
-                });
-              }
-            },
-            child: Container(
-              height: 200,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.outline.withValues(alpha: 0.2),
-                ),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // 🔹 Background gradient (placeholder)
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: LinearGradient(
-                        colors: [Colors.grey[900]!, Colors.grey[800]!],
-                      ),
-                    ),
-                  ),
-
-                  // 🔥 Centered Play Button
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.4),
-                          blurRadius: 10,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.play_arrow,
-                      size: 50,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),*/
-
-          const SizedBox(height: 12),
-
-          Center(
-            child: Text(
-              'Toca para reproducir',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    return VideoPlayerSection(videoUrl: widget.emprendimiento.videoUrl ?? '');
   }
 
   Widget _buildMenuTab() {
@@ -1921,7 +1201,7 @@ Widget _buildLocationTabSafe() {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+              color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
             ),
           ),
           clipBehavior: Clip.antiAlias,
@@ -2792,12 +2072,13 @@ Widget _buildLocationTabSafe() {
     return Text(text, style: Theme.of(context).textTheme.bodyMedium);
   }
 
+  
   Widget _buildFloatingActionButtons() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Show navigation FAB only on Location tab
-        if (_tabController.index == 2) ...[
+        if (_tabController.index == 1) ...[
           ScaleTransition(
             scale: _fabAnimation,
             child: FloatingActionButton(
@@ -2809,33 +2090,62 @@ Widget _buildLocationTabSafe() {
           const SizedBox(height: 12),
         ],
         // Always show scroll to top FAB
-        ScaleTransition(
+        /*ScaleTransition(
           scale: _fabAnimation,
           child: FloatingActionButton(
             heroTag: 'scroll_top',
             onPressed: _scrollToTop,
             child: const Icon(Icons.keyboard_arrow_up),
           ),
-        ),
+        ),*/
       ],
     );
   }
+  /*Widget _buildFloatingActionButtons() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_tabController.index == 2) ...[
+          ScaleTransition(
+            scale: _fabAnimation,
+            child: FloatingActionButton(
+              heroTag: 'navigate',
+              onPressed: _openInMaps,
+              child: const Icon(Icons.navigation),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        // Only show if scrolled down
+        if (_showScrollToTop)
+          ScaleTransition(
+            scale: _fabAnimation,
+            child: FloatingActionButton(
+              heroTag: 'scroll_top',
+              onPressed: _scrollToTop,
+              child: const Icon(Icons.keyboard_arrow_up),
+            ),
+          ),
+      ],
+    );
+  }*/
 
-  void _scrollToTop() {
-    // Get the outer scroll controller from NestedScrollView
-    final nestedState = _nestedScrollKey.currentState;
-    if (nestedState != null) {
-      // Access the outer controller
-      final outerController = nestedState.outerController;
-      if (outerController.hasClients) {
-        outerController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-        );
-      }
+  /*void _scrollToTop() {
+    try {
+    final scrollable = Scrollable.maybeOf(context);
+    
+    if (scrollable != null && scrollable.position.hasPixels) {
+      scrollable.position.animateTo(
+        0,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
     }
+  } catch (e) {
+    // Silently fail if scrolling not possible
+    debugPrint('Scroll to top failed: $e');
   }
+  }*/
 
   // Helper methods
   Color _getCategoryColor(String categoria) {
@@ -2893,7 +2203,7 @@ Widget _buildLocationTabSafe() {
     );
   }
 
-  void _toggleLike() {
+  /*void _toggleLike() {
     setState(() {
       _isLiked = !_isLiked;
       _likesCount += _isLiked ? 1 : -1;
@@ -2911,7 +2221,21 @@ Widget _buildLocationTabSafe() {
         behavior: SnackBarBehavior.floating,
       ),
     );
-  }
+  }*/
+
+  void _toggleLike() {
+  _isLikedNotifier.value = !_isLikedNotifier.value;
+  _likesCountNotifier.value += _isLikedNotifier.value ? 1 : -1;
+  
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(_isLikedNotifier.value ? 'Te gusta' : 'Ya no te gusta'),
+      duration: const Duration(seconds: 1),
+    ),
+  );
+}
+
+
 
   Future<void> _toggleCommentLike(Comment comment) async {
     if (_commentRepository == null) {
@@ -3057,7 +2381,7 @@ Widget _buildLocationTabSafe() {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                /*Text(
                   'Tu calificación:',
                   style: Theme.of(context).textTheme.titleSmall,
                 ),
@@ -3093,7 +2417,7 @@ Widget _buildLocationTabSafe() {
                       ),
                     ),
                   ),
-                ],
+                ],*/
                 const SizedBox(height: 16),
                 TextField(
                   controller: commentController,
@@ -3336,11 +2660,7 @@ class _FullscreenMapPageState extends State<_FullscreenMapPage> {
     _mapController = MapController();
   }
 
-  @override
-  void dispose() {
-    _mapController.dispose();
-    super.dispose();
-  }
+  
 
   String _getMapTileUrl() {
     switch (_currentMapStyle) {

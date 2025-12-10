@@ -18,4 +18,8 @@
     <style name="NormalTheme" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="android:windowBackground">?android:colorBackground</item>
     </style>
+
+    <style name="NormalTheme" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
 </resources>

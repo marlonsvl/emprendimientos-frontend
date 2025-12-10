@@ -327,30 +327,30 @@ abstract class AppException implements Exception {
 }
 
 class NetworkException extends AppException {
-  const NetworkException(String message) : super(message);
+  const NetworkException(super.message);
 }
 
 class ServerException extends AppException {
   final int? statusCode;
-  const ServerException(String message, {this.statusCode}) : super(message);
+  const ServerException(super.message, {this.statusCode});
 }
 
 class UnauthorizedException extends AppException {
-  const UnauthorizedException(String message) : super(message);
+  const UnauthorizedException(super.message);
 }
 
 class NotFoundException extends AppException {
-  const NotFoundException(String message) : super(message);
+  const NotFoundException(super.message);
 }
 
 class ValidationException extends AppException {
-  const ValidationException(String message) : super(message);
+  const ValidationException(super.message);
 }
 
 class DataException extends AppException {
-  const DataException(String message) : super(message);
+  const DataException(super.message);
 }
 
 class UnknownException extends AppException {
-  const UnknownException(String message) : super(message);
+  const UnknownException(super.message);
 }

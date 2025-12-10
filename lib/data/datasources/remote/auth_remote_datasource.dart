@@ -34,14 +34,60 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
             final accessToken = await localDataSource.getToken();
             if (accessToken != null && accessToken.isNotEmpty) {
               options.headers['Authorization'] = 'Bearer $accessToken';
-              print(
-                'Added Authorization header: Bearer ${accessToken.substring(0, 10)}...',
-              ); // Debug log
+              // Debug log
             } else {
-              print('No access token found!'); // Debug log
+              //print('No access token found!'); // Debug log
             }
           }
           handler.next(options);
+        },
+        // --- ADD onError LOGIC ---
+        onError: (DioException error, handler) async {
+          // Check if the error is 401 Unauthorized and not the login request itself
+          if (error.response?.statusCode == 401 && _requiresAuth(error.requestOptions.path)) {
+            // Get the refresh token
+            final refreshToken = await localDataSource.getRefreshToken();
+
+            if (refreshToken != null && refreshToken.isNotEmpty) {
+              try {
+                // 1. Try to refresh the token
+                final newAuthResponse = await _refreshAuthToken(refreshToken);
+
+                // 2. Save the new tokens locally
+                await localDataSource.saveAuthData(newAuthResponse);
+
+                // 3. Update the request header with the new Access Token
+                final newAccessToken = newAuthResponse.accessToken;
+                error.requestOptions.headers['Authorization'] = 'Bearer $newAccessToken';
+
+                // 4. Re-send the original failed request
+                // Use _tokenDio to prevent recursion in the interceptor
+                final response = await dio.request(
+                  error.requestOptions.path,
+                  options: Options(
+                    method: error.requestOptions.method,
+                    headers: error.requestOptions.headers,
+                  ),
+                  data: error.requestOptions.data,
+                  queryParameters: error.requestOptions.queryParameters,
+                );
+
+                // 5. Resolve the handler with the successful re-sent response
+                return handler.resolve(response);
+
+              } on ServerException {
+                // If refresh fails (e.g., refresh token is also expired), force logout
+                await localDataSource.clearAuthData();
+                return handler.next(error); // Proceed to error state (AuthUnauthenticated)
+              }
+            } else {
+              // No refresh token available, force logout
+              await localDataSource.clearAuthData();
+            }
+          }
+          
+          // For all other errors (404, 500, or 401 on an unhandled path), pass it down
+          return handler.next(error);
         },
       ),
     );
@@ -66,7 +112,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         //return AuthResponse.fromJson(response.data);
         return AuthResponse(
           success: true,
-          message: 'Login successful!',
+          message: '¡Inicio de sesión exitoso!',
           user: null, // No user data since they're not authenticated yet
           accessToken: response.data['access'],
           refreshToken: response
@@ -79,14 +125,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       // The fix is here: Safely check for a response and then for the status code
       if (e.response != null) {
         if (e.response!.statusCode == 401) {
-          throw ServerException('Invalid credentials');
+          throw ServerException('Credenciales inválidas');
         }
       }
       // Handle other Dio exceptions (network, timeout, etc.)
-      throw ServerException('Network error: ${e.message}');
+      throw ServerException('Error de red: ${e.message}');
     } catch (e) {
       // Catch any other unexpected errors
-      throw ServerException('Unexpected error occurred: ${e.toString()}');
+      throw ServerException('Se produjo un error inesperado: ${e.toString()}');
     }
   }
 
@@ -97,31 +143,55 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         ApiConstants.register,
         data: request.toJson(),
       );
-      print(  'RESPONSE STATUS: ${response.data}');
+      //print(  'RESPONSE STATUS: ${response.data}');
       if (response.statusCode == 201) {
         // Return success response without automatic login
         // User needs to verify email before being authenticated
         return AuthResponse(
           success: true,
           message:
-              'Registration successful! Please check your email to verify your account.',
+              '¡Registro exitoso! Por favor, revise su correo electrónico para verificar su cuenta.',
           user: null, // No user data since they're not authenticated yet
           accessToken: null, // No token since they're not authenticated yet
         );
       } else {
-        throw ServerException('Registration failed');
+        throw ServerException('El registro falló');
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
         final errors = e.response?.data;
         if (errors is Map && errors.containsKey('email')) {
-          throw ServerException('Email already exists');
+          throw ServerException('El correo electrónico ya existe');
         }
-        throw ServerException('Registration failed: Invalid data');
+        throw ServerException('Error de registro: Datos no válidos');
       }
-      throw ServerException('Network error: ${e.message}');
+      throw ServerException('Error de red: ${e.message}');
     } catch (e) {
-      throw ServerException('Unexpected error occurred');
+      throw ServerException('Se produjo un error inesperado');
+    }
+  }
+
+  Future<AuthResponse> _refreshAuthToken(String refreshToken) async {
+    try {
+      final response = await dio.post(
+        ApiConstants.refreshToken, // ASSUME this constant is defined
+        data: {'refresh': refreshToken},
+      );
+      
+      if (response.statusCode == 200) {
+        return AuthResponse(
+          success: true,
+          message: 'Token refreshed!',
+          user: null,
+          accessToken: response.data['access'],
+          refreshToken: response.data['refresh'],
+        );
+      } else {
+        throw ServerException('Failed to refresh token: Status ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      // Treat any Dio error during refresh as a failure, triggering logout
+      throw ServerException('Refresh failed. Logging out. ${e.message}');
     }
   }
 
@@ -134,12 +204,12 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
 
       if (response.statusCode != 204) {
-        throw ServerException('Password reset failed');
+        throw ServerException('Error al restablecer la contraseña');
       }
     } on DioException catch (e) {
-      throw ServerException('Network error: ${e.message}');
+      throw ServerException('Error de red: ${e.message}');
     } catch (e) {
-      throw ServerException('Unexpected error occurred');
+      throw ServerException('Se produjo un error inesperado');
     }
   }
 
@@ -151,21 +221,21 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         data: {'email': email},
       );
       if (response.statusCode != 204) {
-        throw ServerFailure('Failed to send password reset email');
+        throw ServerFailure('No se pudo enviar el correo electrónico de restablecimiento de contraseña');
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
         final errors = e.response?.data;
         if (errors is Map && errors.containsKey('email')) {
-          throw ServerFailure('Invalid email address');
+          throw ServerFailure('Dirección de correo electrónico no válida');
         }
-        throw ServerFailure('Failed to send reset email: Invalid data');
+        throw ServerFailure('No se pudo enviar el correo electrónico de restablecimiento: Datos no válidos');
       } else if (e.response?.statusCode == 404) {
-        throw ServerFailure('Email address not found');
+        throw ServerFailure('Dirección de correo electrónico no encontrada');
       }
-      throw ServerFailure('Network error: ${e.message}');
+      throw ServerFailure('Error de red: ${e.message}');
     } catch (e) {
-      throw ServerFailure('Unexpected error occurred');
+      throw ServerFailure('Se produjo un error inesperado');
     }
   }
 
@@ -184,26 +254,26 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
 
       if (response.statusCode != 204) {
-        throw ServerException('Password update failed');
+        throw ServerException('Error en la actualización de contraseña');
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
         final errors = e.response?.data;
         if (errors is Map) {
           if (errors.containsKey('current_password')) {
-            throw ServerException('Current password is incorrect');
+            throw ServerException('La contraseña actual es incorrecta');
           } else if (errors.containsKey('new_password')) {
-            throw ServerException('New password does not meet requirements');
+            throw ServerException('La nueva contraseña no cumple los requisitos');
           }
-          throw ServerException('Password update failed: Invalid data');
+          throw ServerException('Error en la actualización de contraseña: Datos no válidos');
         }
-        throw ServerException('Password update failed');
+        throw ServerException('Error en la actualización de contraseña');
       } else if (e.response?.statusCode == 401) {
-        throw ServerException('Authentication required');
+        throw ServerException('Se requiere autenticación');
       }
-      throw ServerException('Network error: ${e.message}');
+      throw ServerException('Error de red: ${e.message}');
     } catch (e) {
-      throw ServerException('Unexpected error occurred');
+      throw ServerException('Se produjo un error inesperado');
     }
   }
 
@@ -267,7 +337,7 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       );
 
       if (response.statusCode != 204) {
-        throw ServerException('Failed to send email verification');
+        throw ServerException('No se pudo enviar el correo electrónico de verificación');
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 400) {
@@ -277,25 +347,25 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
             final detail = errors['detail'].toString();
             if (detail.contains('already activated') ||
                 detail.contains('already verified')) {
-              throw ServerException('Email is already verified');
+              throw ServerException('El correo electrónico ya está verificado');
             }
-            throw ServerException('Email verification failed: $detail');
+            throw ServerException('Error en la verificación del correo electrónico: $detail');
           }
-          throw ServerException('Email verification failed: Invalid request');
+          throw ServerException('Error en la verificación de correo electrónico: Solicitud no válida');
         }
-        throw ServerException('Email verification failed');
+        throw ServerException('Error en la verificación del correo electrónico');
       } else if (e.response?.statusCode == 401) {
-        throw ServerException('Authentication required');
+        throw ServerException('Se requiere autenticación');
       } else if (e.response?.statusCode == 403) {
-        throw ServerException('Permission denied');
+        throw ServerException('Permiso denegado');
       } else if (e.response?.statusCode == 429) {
         throw ServerException(
-          'Too many requests. Please wait before requesting again',
+          'Demasiadas solicitudes. Espere antes de volver a solicitar.',
         );
       }
-      throw ServerException('Network error: ${e.message}');
+      throw ServerException('Error de red: ${e.message}');
     } catch (e) {
-      throw ServerException('Unexpected error occurred');
+      throw ServerException('Se produjo un error inesperado');
     }
   }
 
@@ -307,15 +377,15 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       if (response.statusCode == 200) {
         return UserModel.fromJson(response.data);
       } else {
-        throw ServerException('Failed to get user data');
+        throw ServerException('No se pudieron obtener los datos del usuario');
       }
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
-        throw ServerException('Unauthorized - token may be expired');
+        throw ServerException('No autorizado: el token puede estar vencido');
       }
-      throw ServerException('Network error: ${e.message}');
+      throw ServerException('Erro de red: ${e.message}');
     } catch (e) {
-      throw ServerException('Unexpected error occurred ${e.toString()}');
+      throw ServerException('Se produjo un error inesperado ${e.toString()}');
     }
   }
 }

@@ -88,8 +88,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     try {
       await Future.wait([
         sharedPreferences.remove(accessTokenKey),
-        sharedPreferences.remove(refreshTokenKey),
-        //sharedPreferences.remove(userDataKey),
+        sharedPreferences.remove(refreshTokenKey),        
+        sharedPreferences.remove(userDataKey),
       ]);
     } catch (e) {
       throw CacheFailure();
