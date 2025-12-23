@@ -1482,6 +1482,9 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
 }
 
 */
+
+
+/*
 import 'dart:async';
 import 'package:emprendegastroloja/core/constants/api_constants.dart';
 import 'package:emprendegastroloja/presentation/pages/main/widgets/filter_bottom_sheet.dart';
@@ -1848,6 +1851,7 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
   }
 
   Widget _buildEmprendimientosList(List<Emprendimiento> emprendimientos) {
+    
     if (emprendimientos.isEmpty) {
       return EmptyStateWidget(
         onClearFilters: () {
@@ -2087,3 +2091,675 @@ class FilterState {
   }
 }
 
+*/
+
+import 'dart:async';
+import 'package:emprendegastroloja/core/constants/api_constants.dart';
+import 'package:emprendegastroloja/presentation/pages/main/widgets/filter_bottom_sheet.dart';
+import 'package:emprendegastroloja/presentation/pages/main/widgets/emprendimientos_widgets.dart';
+import 'package:flutter/material.dart';
+import '../../../data/models/emprendimiento_model.dart';
+import '../../../data/datasources/remote/emprendimientos_remote_datasource.dart';
+import '../../../data/datasources/local/emprendimientos_local_datasource.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../domain/repositories/emprendimientos_repository.dart';
+import 'emprendimiento_detail_page.dart';
+import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
+
+// MARK: - Main Page Widget
+class EmprendimientosSearchPage extends StatefulWidget {
+  final AuthRepository authRepository;
+  
+  const EmprendimientosSearchPage({
+    super.key,
+    required this.authRepository,
+  });
+
+  @override
+  State<EmprendimientosSearchPage> createState() => 
+      _EmprendimientosSearchPageState();
+}
+
+class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  
+  // MARK: - Dependencies
+  late EmprendimientosRepository _repository;
+  String? _authToken;
+  
+  // MARK: - Controllers
+  late TabController _tabController;
+  late AnimationController _fabAnimationController;
+  late AnimationController _searchAnimationController;
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  
+  // MARK: - State
+  final _searchState = SearchState();
+  final _filterState = FilterState();
+  Timer? _debounce;
+  int _currentTabIndex = 0; // Track current tab
+  
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupControllers();
+    _initializeAsync();
+  }
+
+  Future<void> _initializeAsync() async {
+    await _initializeRepository();
+    await _loadData();
+  }
+
+  Future<void> _initializeRepository() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tokenResult = await widget.authRepository.getAuthToken();
+      
+      _authToken = tokenResult.fold(
+        (failure) {
+          debugPrint('Auth token error: ${failure.toString()}');
+          return null;
+        },
+        (token) => token,
+      );
+
+      _repository = EmprendimientosRepository(
+        remoteDataSource: EmprendimientosRemoteDataSource(
+          baseUrl: ApiConstants.baseUrl,
+        ),
+        localDataSource: EmprendimientosLocalDataSource(
+          sharedPreferences: prefs,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Repository initialization error: $e');
+      rethrow;
+    }
+  }
+
+  void _setupControllers() {
+    _tabController = TabController(length: 3, vsync: this);
+    
+    // Add tab change listener
+    _tabController.addListener(_onTabChanged);
+    
+    _fabAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _searchAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+
+    _searchController.addListener(_onSearchChanged);
+    _scrollController.addListener(_onScroll);
+
+    // Delayed animation start
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _fabAnimationController.forward();
+        _searchAnimationController.forward();
+      }
+    });
+  }
+
+  // NEW: Handle tab changes
+  void _onTabChanged() {
+    if (!_tabController.indexIsChanging) return;
+    
+    final newIndex = _tabController.index;
+    if (_currentTabIndex != newIndex) {
+      _currentTabIndex = newIndex;
+      
+      // Reset filters when changing tabs to maintain consistency
+      if (mounted) {
+        setState(() {
+          // Clear search
+          _searchController.clear();
+          _searchState.currentQuery = '';
+          
+          // Reset filters to show all data in the new tab
+          _filterState.reset();
+          
+          // Recalculate filtered data for new tab
+          _filterEmprendimientos();
+        });
+      }
+    }
+  }
+
+  void _onSearchChanged() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _searchState.currentQuery = _searchController.text;
+          _searchState.showHistory = _searchController.text.isEmpty;
+          _filterEmprendimientos();
+        });
+      }
+    });
+  }
+
+  void _onScroll() {
+    final offset = _scrollController.offset;
+    if (offset < 100 && !_fabAnimationController.isDismissed) {
+      _fabAnimationController.reverse();
+    } else if (offset > 100 && !_fabAnimationController.isCompleted) {
+      _fabAnimationController.forward();
+    }
+  }
+
+  Future<void> _loadData() async {
+    if (!mounted) return;
+    
+    try {
+      setState(() => _searchState.isLoading = true);
+
+      // Auth check
+      final isSignedIn = await widget.authRepository.isSignedIn();
+      if (!isSignedIn) {
+        _showErrorSnackbar('Por favor, inicia sesión para continuar.');
+        return;
+      }
+
+      // Ensure token
+      if (_authToken == null || _authToken!.isEmpty) {
+        final tokenResult = await widget.authRepository.getAuthToken();
+        _authToken = tokenResult.fold((failure) => null, (token) => token);
+        
+        if (_authToken == null || _authToken!.isEmpty) {
+          _showErrorSnackbar('Error de autenticación. Inicia sesión nuevamente.');
+          return;
+        }
+      }
+
+      // Load preferences
+      await _loadFilterPreferences();
+      
+      // Load search history
+      _searchState.searchHistory = await _repository.getSearchHistory();
+
+      // Load parroquias (all available) - ALWAYS from complete dataset
+      try {
+        _filterState.parroquias = await _repository.getParroquias();
+      } catch (e) {
+        debugPrint('Error loading parroquias: $e');
+        // Fallback: load all data first
+        final allData = await _repository.getEmprendimientos(
+          ordenarPor: _filterState.sortBy,
+          token: _authToken,
+          forceRefresh: false,
+        );
+        _filterState.parroquias = 
+            _repository.getUniqueParroquias(allData).toList();
+      }
+
+      // Load ALL emprendimientos without filters first
+      // This ensures we always have the complete dataset
+      final allData = await _repository.getEmprendimientos(
+        ordenarPor: _filterState.sortBy,
+        token: _authToken,
+        forceRefresh: true,
+      );
+
+      _searchState.allEmprendimientos = allData;
+
+      // IMPORTANT: Extract categories and parroquias from ALL data
+      // not from filtered data
+      _filterState.categories = 
+          _repository.getUniqueCategories(_searchState.allEmprendimientos);
+      
+      // If parroquias weren't loaded above, get them from all data
+      if (_filterState.parroquias.isEmpty) {
+        _filterState.parroquias = 
+            _repository.getUniqueParroquias(_searchState.allEmprendimientos)
+                .toList();
+      }
+
+      // Now apply filters
+      _filterEmprendimientos();
+
+    } catch (e) {
+      String errorMessage = 'Error al cargar datos: $e';
+      
+      if (e.toString().contains('No autorizado') || 
+          e.toString().contains('401')) {
+        errorMessage = 'Sesión expirada. Inicia sesión nuevamente.';
+        await widget.authRepository.logout();
+      }
+      
+      _showErrorSnackbar(errorMessage);
+    } finally {
+      if (mounted) {
+        setState(() => _searchState.isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadFilterPreferences() async {
+    final preferences = await _repository.getFilterPreferences();
+    
+    _filterState.selectedCategory = preferences['categoria'] ?? 'Todas';
+    _filterState.sortBy = preferences['ordenar_por'] ?? 'categoria';
+    
+    final savedParroquias = preferences['parroquia'] ?? 'Todas';
+    if (savedParroquias != 'Todas' && savedParroquias.isNotEmpty) {
+      _filterState.selectedParroquias = savedParroquias.split(',').toSet();
+    } else {
+      _filterState.selectedParroquias.clear();
+    }
+  }
+
+  // IMPROVED: Filter logic that works per tab
+  void _filterEmprendimientos() {
+    // Start with ALL emprendimientos
+    var filtered = List<Emprendimiento>.from(_searchState.allEmprendimientos);
+
+    // Apply search filter first
+    if (_searchState.currentQuery.isNotEmpty) {
+      filtered = _repository.searchEmprendimientos(
+        filtered, 
+        _searchState.currentQuery,
+      );
+    }
+
+    // Apply category filter
+    if (_filterState.selectedCategory != 'Todas') {
+      filtered = _repository.filterByCategory(
+        filtered, 
+        _filterState.selectedCategory,
+      );
+    }
+
+    // Apply parroquia filter
+    if (_filterState.selectedParroquias.isNotEmpty) {
+      filtered = filtered
+          .where((e) => _filterState.selectedParroquias.contains(e.parroquia))
+          .toList();
+    }
+
+    // Apply price filter
+    if (_filterState.maxPrice != null) {
+      filtered = filtered
+          .where((e) => e.precioPromedio <= _filterState.maxPrice!)
+          .toList();
+    }
+
+    if (mounted) {
+      setState(() {
+        _searchState.filteredEmprendimientos = filtered;
+      });
+    }
+  }
+
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        action: message.contains('inicia sesión')
+            ? SnackBarAction(
+                label: 'Iniciar Sesión',
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, '/login');
+                },
+              )
+            : null,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_onTabChanged); // Clean up listener
+    _tabController.dispose();
+    _fabAnimationController.dispose();
+    _searchAnimationController.dispose();
+    _searchController.dispose();
+    _scrollController.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    
+    return Scaffold(
+      body: NestedScrollView(
+        controller: _scrollController,
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverAppBarWidget(
+            animation: _searchAnimationController,
+            onRefresh: _loadData,
+            onFilterPressed: _showFilterDialog,
+            onLogoutPressed: _showLogoutDialog,
+            hasActiveFilters: _filterState.hasActiveFilters,
+          ),
+          SearchSectionWidget(
+            controller: _searchController,
+            animation: _searchAnimationController,
+            currentQuery: _searchState.currentQuery,
+            showHistory: _searchState.showHistory,
+            searchHistory: _searchState.searchHistory,
+            onHistoryTap: (term) {
+              _searchController.text = term;
+              setState(() => _searchState.showHistory = false);
+            },
+            onHistoryClear: () {
+              _repository.clearSearchHistory();
+              setState(() => _searchState.searchHistory.clear());
+            },
+            onHistoryDelete: (term) {
+              setState(() => _searchState.searchHistory.remove(term));
+            },
+            onSubmitted: (value) {
+              if (value.isNotEmpty) {
+                _repository.addToSearchHistory(value);
+              }
+            },
+          ),
+          if (!_searchState.isLoading)
+            FilterTabsWidget(controller: _tabController),
+        ],
+        body: _buildBody(),
+      ),
+      floatingActionButton: _buildFloatingActionButton(),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_searchState.isLoading) {
+      return const LoadingStateWidget();
+    }
+
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _buildEmprendimientosList(_searchState.filteredEmprendimientos),
+        _buildEmprendimientosList(_getPremiumEmprendimientos()),
+        _buildFavoritesList(),
+      ],
+    );
+  }
+
+  Widget _buildEmprendimientosList(List<Emprendimiento> emprendimientos) {
+    
+    if (emprendimientos.isEmpty) {
+      return EmptyStateWidget(
+        onClearFilters: () {
+          _searchController.clear();
+          setState(() {
+            _filterState.reset();
+            _filterEmprendimientos();
+          });
+        },
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: emprendimientos.length,
+        itemBuilder: (context, index) {
+          return EmprendimientoCard(
+            emprendimiento: emprendimientos[index],
+            onTap: () => _navigateToDetail(emprendimientos[index]),
+            onFavoriteToggle: () => _toggleFavorite(emprendimientos[index]),
+          );
+        },
+      ),
+    );
+  }
+
+  // IMPROVED: Get premium from filtered results to respect current filters
+  List<Emprendimiento> _getPremiumEmprendimientos() {
+    return _searchState.filteredEmprendimientos
+        .where((e) => e.categoryPriority == 3)
+        .toList();
+  }
+
+  // IMPROVED: Get favorites from filtered results to respect current filters
+  Widget _buildFavoritesList() {
+    final favorites = _searchState.filteredEmprendimientos
+        .where((e) => e.isFavoritedByUser)
+        .toList();
+
+    if (favorites.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const EmptyFavoritesWidget(),
+            if (_filterState.hasActiveFilters) ...[
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() {
+                    _filterState.reset();
+                    _filterEmprendimientos();
+                  });
+                },
+                icon: const Icon(Icons.filter_alt_off),
+                label: const Text('Limpiar filtros'),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return _buildEmprendimientosList(favorites);
+  }
+
+  Widget _buildFloatingActionButton() {
+    return ScaleTransition(
+      scale: Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(
+          parent: _fabAnimationController,
+          curve: Curves.easeOut,
+        ),
+      ),
+      child: FloatingActionButton(
+        onPressed: () {
+          _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeInOut,
+          );
+        },
+        child: const Icon(Icons.keyboard_arrow_up),
+      ),
+    );
+  }
+
+  void _showFilterDialog() {
+    // Create a copy with COMPLETE filter options (not from filtered data)
+    final filterStateCopy = _filterState.copy();
+    
+    // Ensure we're passing the complete dataset for filter calculations
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => FilterBottomSheet(
+        filterState: filterStateCopy,
+        allEmprendimientos: _searchState.allEmprendimientos, // Complete dataset
+        onApply: (newState) {
+          setState(() {
+            _filterState.updateFrom(newState);
+          });
+          
+          _repository.saveFilterPreferences(
+            categoria: _filterState.selectedCategory,
+            parroquia: _filterState.selectedParroquias.isEmpty
+                ? 'Todas'
+                : _filterState.selectedParroquias.join(','),
+            ordenarPor: _filterState.sortBy,
+          );
+          
+          // Reapply filters with new state
+          _filterEmprendimientos();
+        },
+      ),
+    );
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cerrar sesión'),
+        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              
+              showDialog(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) => const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              );
+
+              try {
+                await widget.authRepository.logout();
+                if (mounted) {
+                  Navigator.pop(context);
+                  Navigator.pushReplacementNamed(context, '/login');
+                }
+              } catch (e) {
+                if (mounted) {
+                  Navigator.pop(context);
+                  _showErrorSnackbar('Error al cerrar sesión: $e');
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            child: const Text('Cerrar sesión'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _navigateToDetail(Emprendimiento emprendimiento) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EmprendimientoDetailPage(
+          emprendimiento: emprendimiento,
+          authRepository: widget.authRepository,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleFavorite(Emprendimiento emprendimiento) async {
+    if (_authToken == null || _authToken!.isEmpty) {
+      _showErrorSnackbar('Necesitas iniciar sesión para marcar favoritos');
+      return;
+    }
+
+    try {
+      final success = await _repository.toggleLike(
+        emprendimiento.id,
+        _authToken!,
+      );
+
+      if (success && mounted) {
+        setState(() {
+          final index = _searchState.allEmprendimientos
+              .indexWhere((e) => e.id == emprendimiento.id);
+          
+          if (index != -1) {
+            _searchState.allEmprendimientos[index] =
+                _searchState.allEmprendimientos[index].copyWith(
+              isFavoritedByUser: 
+                  !_searchState.allEmprendimientos[index].isFavoritedByUser,
+            );
+          }
+          _filterEmprendimientos();
+        });
+      } else if (!success) {
+        _showErrorSnackbar('Error al actualizar favoritos');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error al actualizar favoritos: $e');
+    }
+  }
+}
+
+// MARK: - State Management Classes
+class SearchState {
+  List<Emprendimiento> allEmprendimientos = [];
+  List<Emprendimiento> filteredEmprendimientos = [];
+  List<String> searchHistory = [];
+  String currentQuery = '';
+  bool isLoading = true;
+  bool showHistory = false;
+}
+
+class FilterState {
+  List<String> parroquias = [];
+  Set<String> categories = {};
+  String selectedCategory = 'Todas';
+  Set<String> selectedParroquias = {};
+  String sortBy = 'categoria';
+  double? maxPrice;
+
+  bool get hasActiveFilters =>
+      selectedParroquias.isNotEmpty ||
+      selectedCategory != 'Todas' ||
+      maxPrice != null;
+
+  FilterState copy() {
+    return FilterState()
+      ..parroquias = List.from(parroquias)
+      ..categories = Set.from(categories)
+      ..selectedCategory = selectedCategory
+      ..selectedParroquias = Set.from(selectedParroquias)
+      ..sortBy = sortBy
+      ..maxPrice = maxPrice;
+  }
+
+  void updateFrom(FilterState other) {
+    selectedCategory = other.selectedCategory;
+    selectedParroquias = other.selectedParroquias;
+    sortBy = other.sortBy;
+    maxPrice = other.maxPrice;
+  }
+
+  void reset() {
+    selectedCategory = 'Todas';
+    selectedParroquias.clear();
+    sortBy = 'categoria';
+    maxPrice = null;
+  }
+}
