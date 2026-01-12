@@ -8,14 +8,18 @@ class SliverAppBarWidget extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onFilterPressed;
   final VoidCallback onLogoutPressed;
+  final VoidCallback onDeleteAccountPressed;
   final bool hasActiveFilters;
+  final bool isGuest;
 
   const SliverAppBarWidget({super.key, 
     required this.animation,
     required this.onRefresh,
     required this.onFilterPressed,
     required this.onLogoutPressed,
+    required this.onDeleteAccountPressed,
     required this.hasActiveFilters,
+    required this.isGuest,
   });
 
   @override
@@ -65,6 +69,7 @@ class SliverAppBarWidget extends StatelessWidget {
       ),
         
       actions: [
+        
         IconButton(
           icon: const Icon(Icons.refresh),
           onPressed: onRefresh,
@@ -78,11 +83,37 @@ class SliverAppBarWidget extends StatelessWidget {
           onPressed: onFilterPressed,
           tooltip: 'Filtros',
         ),
-        IconButton(
-          onPressed: onLogoutPressed,
-          icon: const Icon(Icons.logout),
-          tooltip: 'Cerrar sesión',
-        ),
+        if (isGuest)
+          IconButton(
+            onPressed: onLogoutPressed,
+            icon: const Icon(Icons.exit_to_app),
+            tooltip: 'Salir',
+          )
+        else
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'logout') onLogoutPressed();
+              if (value == 'delete') onDeleteAccountPressed();
+            },
+            icon: const Icon(Icons.more_vert), // The "three dots" menu
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Cerrar sesión'),
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'delete',
+                child: ListTile(
+                  leading: Icon(Icons.delete_forever, color: Colors.red),
+                  title: Text('Eliminar cuenta', style: TextStyle(color: Colors.red)),
+                ),
+              ),
+            ],
+          ),
+        
       ],
     );
   }
@@ -543,7 +574,7 @@ class EmprendimientoCard extends StatelessWidget {
             ],
           ),
         ),
-        Column(
+        /*Column(
           children: [
             RatingStarsWidget(rating: emprendimiento.averageRating),
             Text(
@@ -553,7 +584,7 @@ class EmprendimientoCard extends StatelessWidget {
                   ),
             ),
           ],
-        ),
+        ),*/
       ],
     );
   }
@@ -580,7 +611,7 @@ class EmprendimientoCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
-            emprendimiento.tipoTurismo,
+            emprendimiento.tipo,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.w500,

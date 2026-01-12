@@ -31,6 +31,11 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<LogoutRequested>(_onLogoutRequested);
     on<PasswordResetRequested>(_onPasswordResetRequested);
     on<AuthStatusChecked>(_onAuthStatusChecked);
+    on<GuestLoginRequested>((event, emit) async {
+      emit(AuthLoading());
+      await Future.delayed(const Duration(milliseconds: 500)); // Simulate loading
+      emit(AuthGuest());
+    });
 
     // Check authentication status on initialization
     add(AuthStatusChecked());
@@ -120,4 +125,5 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthUnauthenticated());
     }
   }
+  
 }

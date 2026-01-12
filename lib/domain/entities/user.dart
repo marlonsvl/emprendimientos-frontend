@@ -6,8 +6,9 @@ class User {
   final String? lastName;
   final String? profilePicture;
   final String? phone;
+  final bool isGuest;
 
-  User({
+  const User({
     required this.id,
     required this.email,
     required this.username,
@@ -15,7 +16,18 @@ class User {
     this.lastName,
     this.profilePicture,
     this.phone,
+    this.isGuest = false,
   });
 
   String get fullName => '$firstName $lastName';
+  factory User.guest() {
+    return User(
+      id: -1,
+      email: 'guest@local',
+      username: 'Guest',
+      firstName: 'Guest',
+      lastName: 'User',
+      isGuest: true,
+    );
+  }
 }

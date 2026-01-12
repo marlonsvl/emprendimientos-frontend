@@ -101,7 +101,7 @@ class _LoginPageState extends State<LoginPage> {
                 backgroundColor: theme.colorScheme.error,
               ),
             );
-          } else if (state is AuthAuthenticated) {
+          } else if (state is AuthAuthenticated || state is AuthGuest) {
             Navigator.of(context).pushNamedAndRemoveUntil(
               '/greeting',
               (route) => false,
@@ -408,7 +408,7 @@ class _LoginPageState extends State<LoginPage> {
           
           // Login Button
           CustomButton(
-            text: 'Sign In',
+            text: 'Iniciar sesión',
             onPressed: _handleLogin,
             isLoading: state is AuthLoading && 
                      (_usernameController.text.isNotEmpty || 
@@ -456,6 +456,16 @@ class _LoginPageState extends State<LoginPage> {
           ),
           
           SizedBox(height: config.verticalSpacing * 2),
+
+          // Guest login button
+          CustomButton(
+            text: 'Continuar como invitado',
+            onPressed: () {
+              context.read<AuthBloc>().add(GuestLoginRequested());
+            },
+            isOutlined: true,
+            icon: const Icon(Icons.visibility),
+          ),
         ],
       ),
     );

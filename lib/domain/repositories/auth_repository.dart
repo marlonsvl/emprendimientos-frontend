@@ -74,9 +74,7 @@ abstract class AuthRepository {
   //Future<Either<Failure, String>> refreshToken();
 
   /// Delete user account
-  //Future<Either<Failure, void>> deleteAccount({
-  //  required String password,
-  //});
+  Future<Either<Failure, void>> deleteAccount();
 
   /// Sign in with Google
   //Future<Either<Failure, User>> signInWithGoogle();
@@ -166,6 +164,8 @@ abstract class AuthRepository {
 
   /// Get authentication token
   Future<Either<Failure, String>> getAuthToken();
+
+  
 
   /// Check password strength
   //Either<Failure, bool> checkPasswordStrength(String password);

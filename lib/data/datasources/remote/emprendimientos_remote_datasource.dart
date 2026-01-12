@@ -27,6 +27,22 @@ class EmprendimientosRemoteDataSource {
     return headers;
   }
 
+  Future<void> deleteAccount(String token) async {
+    final uri = Uri.parse('$baseUrl/api/user-profile/me/'); // Or your specific ID/endpoint
+    
+    final response = await client.delete(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    ).timeout(_timeout);
+
+    if (response.statusCode != 204) {
+      throw Exception('No se pudo eliminar la cuenta');
+    }
+  }
+
   Future<List<Emprendimiento>> getEmprendimientos({
     String? search,
     String? categoria,
