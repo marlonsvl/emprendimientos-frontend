@@ -3,9 +3,12 @@ import 'package:emprendegastroloja/data/datasources/local/auth_local_datasource.
 import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
 import 'package:emprendegastroloja/domain/repositories/comment_repository.dart';
 import 'package:emprendegastroloja/domain/usecases/auth/get_current_user_usecase.dart';
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_bloc.dart';
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_state.dart';
 import 'package:emprendegastroloja/presentation/pages/main/widgets/video_player_section.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../data/models/emprendimiento_model.dart';
 import '../../../data/models/comment_model.dart';
@@ -53,6 +56,11 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
   late final GetCurrentUserUseCase _getCurrentUserUseCase;
 
   final TextEditingController _commentController = TextEditingController();
+
+  bool get _isGuestUser {
+    final authState = context.read<AuthBloc>().state;
+    return authState is AuthGuest;
+  }
 
   List<Comment> _comments = [];
   bool _isLoadingComments = false;
@@ -185,7 +193,7 @@ void _initializeVideoPlayer() {
   }
 
   void _setupControllers() {
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
 
     _fabAnimationController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -256,7 +264,7 @@ void _initializeVideoPlayer() {
               controller: _tabController,
               children: [
                 _buildDetailsTabSafe(),
-                //_buildMenuTab(),
+                _buildMenuTab(),
                 _buildLocationTab(),
                 _buildReviewsTabSafe(),
               ],
@@ -1078,7 +1086,7 @@ void _initializeVideoPlayer() {
           isScrollable: true,
           tabs: const [
             Tab(text: 'Detalles', icon: Icon(Icons.info)),
-            //Tab(text: 'Menú', icon: Icon(Icons.restaurant_menu)),
+            Tab(text: 'Menú', icon: Icon(Icons.restaurant_menu)),
             Tab(text: 'Ubicación', icon: Icon(Icons.map)),
             Tab(text: 'Reseñas', icon: Icon(Icons.reviews)),
           ],
@@ -2188,6 +2196,10 @@ void _initializeVideoPlayer() {
 
   // Action methods
   void _toggleFavorite() {
+    if (_isGuestUser) {
+      _showLoginPrompt('agregar a favoritos');
+      return;
+    }
     setState(() {
       _isFavorited = !_isFavorited;
     });
@@ -2224,15 +2236,20 @@ void _initializeVideoPlayer() {
   }*/
 
   void _toggleLike() {
-  _isLikedNotifier.value = !_isLikedNotifier.value;
-  _likesCountNotifier.value += _isLikedNotifier.value ? 1 : -1;
-  
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text(_isLikedNotifier.value ? 'Te gusta' : 'Ya no te gusta'),
-      duration: const Duration(seconds: 1),
-    ),
-  );
+    if (_isGuestUser) {
+      _showLoginPrompt('dar like');
+      return;
+    }
+
+    _isLikedNotifier.value = !_isLikedNotifier.value;
+    _likesCountNotifier.value += _isLikedNotifier.value ? 1 : -1;
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_isLikedNotifier.value ? 'Te gusta' : 'Ya no te gusta'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
 }
 
 
@@ -2362,7 +2379,44 @@ void _initializeVideoPlayer() {
     );
   }
 
+  void _showLoginPrompt(String action) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      icon: Icon(
+        Icons.login,
+        size: 48,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+      title: const Text('Inicia sesión'),
+      content: Text(
+        'Necesitas iniciar sesión para $action.\n\n'
+        'Crea una cuenta gratis para acceder a todas las funciones.',
+        textAlign: TextAlign.center,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.pushReplacementNamed(context, '/login');
+          },
+          child: const Text('Iniciar sesión'),
+        ),
+      ],
+    ),
+  );
+}
+
   void _showRatingDialog() {
+    if (_isGuestUser) {
+      _showLoginPrompt('escribir una reseña');
+      return;
+    }
+    
     if (_commentRepository == null) {
       _showErrorSnackbar('Sistema de comentarios no disponible');
       return;
@@ -2458,6 +2512,11 @@ void _initializeVideoPlayer() {
   }
 
   void _showReplyDialog(Comment comment) {
+    if (_isGuestUser) {
+      _showLoginPrompt('responder comentarios');
+      return;
+    }
+    
     final replyController = TextEditingController();
 
     showDialog(

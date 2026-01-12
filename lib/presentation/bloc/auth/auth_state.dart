@@ -52,3 +52,19 @@ class PasswordResetSent extends AuthState {
   @override
   List<Object> get props => [message];
 }
+
+class AuthGuest extends AuthState {
+  final User guestUser;
+
+  const AuthGuest() : guestUser = const User(
+    id: -1,
+    email: 'guest@local',
+    username: 'Guest',
+    firstName: 'Guest',
+    lastName: 'User',
+    isGuest: true,
+  );
+
+  @override
+  List<Object> get props => [guestUser];
+}

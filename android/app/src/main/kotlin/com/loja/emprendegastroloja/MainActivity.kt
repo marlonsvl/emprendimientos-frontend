@@ -1,4 +1,4 @@
-package com.example.emprendimientos_frontend
+package com.loja.emprendegastroloja
 
 import io.flutter.embedding.android.FlutterActivity
 

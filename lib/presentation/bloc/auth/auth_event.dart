@@ -60,3 +60,5 @@ class AuthCheckRequested extends AuthEvent {
 
 class AuthStatusChecked extends AuthEvent {}
 
+class GuestLoginRequested extends AuthEvent {}
+

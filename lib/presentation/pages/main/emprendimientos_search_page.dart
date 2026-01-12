@@ -2095,9 +2095,13 @@ class FilterState {
 
 import 'dart:async';
 import 'package:emprendegastroloja/core/constants/api_constants.dart';
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_bloc.dart';
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_event.dart';
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_state.dart';
 import 'package:emprendegastroloja/presentation/pages/main/widgets/filter_bottom_sheet.dart';
 import 'package:emprendegastroloja/presentation/pages/main/widgets/emprendimientos_widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../data/models/emprendimiento_model.dart';
 import '../../../data/datasources/remote/emprendimientos_remote_datasource.dart';
 import '../../../data/datasources/local/emprendimientos_local_datasource.dart';
@@ -2142,6 +2146,12 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
   
   @override
   bool get wantKeepAlive => true;
+
+  bool get _isGuestUser {
+  // Check if current auth state is guest
+  final authState = context.read<AuthBloc>().state;
+  return authState is AuthGuest;
+}
 
   @override
   void initState() {
@@ -2263,21 +2273,23 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
     try {
       setState(() => _searchState.isLoading = true);
 
-      // Auth check
-      final isSignedIn = await widget.authRepository.isSignedIn();
-      if (!isSignedIn) {
-        _showErrorSnackbar('Por favor, inicia sesión para continuar.');
-        return;
-      }
 
-      // Ensure token
-      if (_authToken == null || _authToken!.isEmpty) {
-        final tokenResult = await widget.authRepository.getAuthToken();
-        _authToken = tokenResult.fold((failure) => null, (token) => token);
-        
+      final authState = context.read<AuthBloc>().state;
+      final isGuest = authState is AuthGuest;
+
+      if (isGuest) {
+        // Guest user: clear token and continue
+        _authToken = null;
+      } else {
+        // Logged-in user: validate token
         if (_authToken == null || _authToken!.isEmpty) {
-          _showErrorSnackbar('Error de autenticación. Inicia sesión nuevamente.');
-          return;
+          final tokenResult = await widget.authRepository.getAuthToken();
+          _authToken = tokenResult.fold((failure) => null, (token) => token);
+          
+          if (_authToken == null || _authToken!.isEmpty) {
+            _showErrorSnackbar('Error de autenticación. Inicia sesión nuevamente.');
+            return;
+          }
         }
       }
 
@@ -2330,12 +2342,12 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
     } catch (e) {
       String errorMessage = 'Error al cargar datos: $e';
       
-      if (e.toString().contains('No autorizado') || 
-          e.toString().contains('401')) {
+      if (!_isGuestUser && 
+          (e.toString().contains('No autorizado') || 
+          e.toString().contains('401'))) {
         errorMessage = 'Sesión expirada. Inicia sesión nuevamente.';
         await widget.authRepository.logout();
       }
-      
       _showErrorSnackbar(errorMessage);
     } finally {
       if (mounted) {
@@ -2357,6 +2369,75 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
       _filterState.selectedParroquias.clear();
     }
   }
+
+  Future<void> _showDeleteAccountConfirmation() async {
+  final confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('¿Eliminar cuenta?'),
+      content: const Text('Esta acción es permanente y borrará todos tus datos. ¿Estás seguro?'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm == true) {
+    _handleDeleteAccount();
+  }
+}
+
+  Future<void> _handleDeleteAccount() async {
+  // Show confirmation dialog first
+  final bool? confirm = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('¿Eliminar cuenta?'),
+      content: const Text('Esta acción es permanente y no se puede deshacer.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+          child: const Text('Eliminar', style: TextStyle(color: Colors.white)),
+        ),
+      ],
+    ),
+  );
+
+  if (confirm == true) {
+    setState(() => _searchState.isLoading = true);
+    
+    // Call the repository. (Assuming you have a way to prompt for password if required)
+    final result = await widget.authRepository.deleteAccount();
+
+    result.fold(
+      (failure) {
+        setState(() => _searchState.isLoading = false);
+        _showErrorSnackbar('Error al eliminar cuenta: ${failure.toString()}');
+      },
+      (_) {
+        // Successfully deleted: Clear local state and go to login/guest screen
+        context.read<AuthBloc>().add(LogoutRequested()); // Or your specific event
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tu cuenta ha sido eliminada.')),
+        );
+      },
+    );
+  }
+}
 
   // IMPROVED: Filter logic that works per tab
   void _filterEmprendimientos() {
@@ -2449,7 +2530,9 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
             onRefresh: _loadData,
             onFilterPressed: _showFilterDialog,
             onLogoutPressed: _showLogoutDialog,
+            onDeleteAccountPressed: _handleDeleteAccount,
             hasActiveFilters: _filterState.hasActiveFilters,
+            isGuest: _isGuestUser,
           ),
           SearchSectionWidget(
             controller: _searchController,
@@ -2537,6 +2620,45 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
 
   // IMPROVED: Get favorites from filtered results to respect current filters
   Widget _buildFavoritesList() {
+    if (_isGuestUser) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.favorite_border,
+              size: 64,
+              color: Theme.of(context).colorScheme.outline,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Inicia sesión para guardar favoritos',
+              style: Theme.of(context).textTheme.titleLarge,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Crea una cuenta para marcar tus emprendimientos favoritos',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pushReplacementNamed(context, '/login');
+              },
+              icon: const Icon(Icons.login),
+              label: const Text('Iniciar sesión'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
     final favorites = _searchState.filteredEmprendimientos
         .where((e) => e.isFavoritedByUser)
         .toList();
@@ -2623,11 +2745,17 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
   }
 
   void _showLogoutDialog() {
+    final isGuest = _isGuestUser;
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Cerrar sesión'),
-        content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+        title: Text(isGuest ? 'Salir como invitado' : 'Cerrar sesión'),
+        content: Text(
+          isGuest 
+            ? '¿Deseas salir del modo invitado? Podrás iniciar sesión después.'
+            : '¿Estás seguro de que deseas cerrar sesión?'
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -2637,32 +2765,24 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
             onPressed: () async {
               Navigator.pop(context);
               
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              );
-
-              try {
-                await widget.authRepository.logout();
-                if (mounted) {
-                  Navigator.pop(context);
+              if (isGuest) {
+                // Just go back to login
+                Navigator.pushReplacementNamed(context, '/login');
+              } else {
+                try {
+                  // Perform logout
+                  await widget.authRepository.logout();
                   Navigator.pushReplacementNamed(context, '/login');
-                }
-              } catch (e) {
-                if (mounted) {
-                  Navigator.pop(context);
+                } catch (e) {
+                  // Close loading indicator
+                  // ignore: use_build_context_synchronously
+                  if (mounted) Navigator.pop(context);
+                  
                   _showErrorSnackbar('Error al cerrar sesión: $e');
                 }
               }
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
-            child: const Text('Cerrar sesión'),
+            child: Text(isGuest ? 'Salir' : 'Cerrar sesión'),
           ),
         ],
       ),
@@ -2680,8 +2800,35 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
       ),
     );
   }
+  void _showLoginPrompt(String action) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Inicia sesión'),
+      content: Text('Necesitas iniciar sesión para $action'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.pushReplacementNamed(context, '/login');
+          },
+          child: const Text('Iniciar sesión'),
+        ),
+      ],
+    ),
+  );
+}
 
   Future<void> _toggleFavorite(Emprendimiento emprendimiento) async {
+    if (_isGuestUser) {
+      _showLoginPrompt('marcar favoritos');
+      return;
+    }
+    
     if (_authToken == null || _authToken!.isEmpty) {
       _showErrorSnackbar('Necesitas iniciar sesión para marcar favoritos');
       return;

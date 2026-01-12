@@ -1,3 +1,4 @@
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_event.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../bloc/auth/auth_bloc.dart';
@@ -17,8 +18,8 @@ class WelcomePage extends StatelessWidget {
     
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
-        if (state is AuthAuthenticated) {
-          Navigator.of(context).pushReplacementNamed('/main');
+        if (state is AuthAuthenticated || state is AuthGuest) {
+          Navigator.of(context).pushReplacementNamed('/greeting');
         }
       },
       child: Scaffold(
@@ -330,7 +331,7 @@ class WelcomePage extends StatelessWidget {
         
         // Sign In Button
         CustomButton(
-          text: 'Sign In',
+          text: 'Iniciar sesión',
           onPressed: () {
             Navigator.of(context).pushNamed('/login');
           },
@@ -349,7 +350,20 @@ class WelcomePage extends StatelessWidget {
           width: double.infinity,
         ),
         
+        SizedBox(height: 16 * config.spacingMultiplier),
+
+        CustomButton(
+          text: 'Continuar como invitado',
+          onPressed: () {
+            context.read<AuthBloc>().add(GuestLoginRequested());
+          },
+          isOutlined: true,
+          icon: const Icon(Icons.visibility),
+          width: double.infinity,
+        ),
+
         SizedBox(height: 24 * config.spacingMultiplier),
+        
         
         // Terms and Privacy
         Text(

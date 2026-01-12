@@ -19,6 +19,7 @@ abstract class AuthRemoteDataSource {
     String? phoneNumber,
   );
   Future<void> sendEmailVerification();
+  Future<void> deleteAccount();
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
@@ -97,7 +98,8 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     return path.contains('/auth/users/me/') ||
         path.contains('/users/me/') ||
         path.contains('/profile/') ||
-        path.startsWith('/api/protected/');
+        path.startsWith('/api/protected/') || 
+        path.contains('/api/user-profile/me/');
   }
 
   @override
@@ -388,4 +390,22 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
       throw ServerException('Se produjo un error inesperado ${e.toString()}');
     }
   }
+
+  @override
+  Future<void> deleteAccount() async {
+    try {
+      final response = await dio.delete('${ApiConstants.baseUrl}/api/user-profile/me/');
+      
+      if (response.statusCode != 204) {
+        // Use a default message if status is not 204
+        throw ServerException('No se pudo eliminar la cuenta');
+      }
+  } on DioException catch (e) {
+    throw ServerException(
+      e.response?.data['error']?.toString() ?? 'Error al eliminar cuenta',
+    );
+  }
+  }
+
+  
 }

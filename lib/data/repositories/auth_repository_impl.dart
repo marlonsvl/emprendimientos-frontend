@@ -222,6 +222,23 @@ Future<Either<Failure, String>> register({
     }
   }
 
+  @override
+Future<Either<Failure, void>> deleteAccount() async {
+  if (await networkInfo.isConnected) {
+    try {
+      // Note: If your backend requires password verification for deletion,
+      // you'll need to pass 'password' in the request body in the step above.
+      await remoteDataSource.deleteAccount();
+      await localDataSource.clearAuthData(); // Clear tokens locally
+      return const Right(null);
+    } on ServerException catch (e) {
+      return Left(ServerFailure(e.message));
+    }
+  } else {
+    return Left(NetworkFailure());
+  }
+}
+
   
   
 }
