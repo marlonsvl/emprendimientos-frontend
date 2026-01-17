@@ -75,6 +75,7 @@ class EmprendimientosRemoteDataSource {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = json.decode(response.body);
         final List<dynamic> results = data['results'] ?? data;
+        print('Fetched =========> ${results.length} emprendimientos from remote.');
         
         return results
             .map((json) => Emprendimiento.fromJson(json as Map<String, dynamic>))

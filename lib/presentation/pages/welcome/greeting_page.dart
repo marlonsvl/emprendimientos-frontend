@@ -84,11 +84,12 @@ class _GreetingPageState extends State<GreetingPage>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              theme.colorScheme.primary.withValues(alpha: 0.1),
-              theme.colorScheme.secondary.withValues(alpha: 0.05),
-              theme.colorScheme.surface,
+              Color(0xFFFFF59D), // Light yellow
+              Color(0xFFFDD835), // Bright yellow
+              Color(0xFFFDB913), // Golden yellow
+              Color(0xFFF39C12), // Deep gold
             ],
-            stops: const [0.0, 0.5, 1.0],
+            stops: [0.0, 0.3, 0.6, 1.0],
           ),
         ),
         child: SafeArea(
@@ -109,107 +110,149 @@ class _GreetingPageState extends State<GreetingPage>
                       SizedBox(height: isSmallScreen ? 20 : 40),
                       
                       // Welcome Icon with Animation
-                      TweenAnimationBuilder<double>(
-                        duration: const Duration(milliseconds: 2000),
-                        tween: Tween(begin: 0.0, end: 1.0),
-                        builder: (context, value, child) {
-                          return Transform.scale(
-                            scale: value,
-                            child: Container(
-                              height: isSmallScreen ? 100 : 140,
-                              width: isSmallScreen ? 100 : 140,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    theme.colorScheme.primary,
-                                    theme.colorScheme.secondary,
-                                  ],
-                                ),
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 8),
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.celebration,
-                                size: isSmallScreen ? 50 : 70,
-                                color: Colors.white,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                      // Logo with Animation
+TweenAnimationBuilder<double>(
+  duration: const Duration(milliseconds: 2000),
+  tween: Tween(begin: 0.0, end: 1.0),
+  builder: (context, value, child) {
+    return Transform.scale(
+      scale: value,
+      child: Container(
+        width: isSmallScreen ? 140 : 196,
+        height: isSmallScreen ? 80 : 112,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 30,
+              offset: const Offset(0, 10),
+            ),
+            BoxShadow(
+              color: const Color(0xFFFDB913).withValues(alpha: 0.5),
+              blurRadius: 40,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Image.asset(
+              'lib/images/logo.png',
+              fit: BoxFit.contain,
+            ),
+          ),
+        ),
+      ),
+    );
+  },
+),
                       
                       SizedBox(height: isSmallScreen ? 24 : 40),
                       
                       // Greeting Message
-                      Text(
-                        _getGreetingMessage(),
-                        style: (isSmallScreen 
-                          ? theme.textTheme.headlineMedium 
-                          : theme.textTheme.displaySmall)?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                      // Greeting Message (splash page style)
+Text(
+  _getGreetingMessage(),
+  style: TextStyle(
+    fontSize: isSmallScreen ? 32 : 42,
+    fontWeight: FontWeight.w900,
+    color: Colors.white,
+    letterSpacing: 1.2,
+    shadows: const [
+      Shadow(
+        color: Colors.black87,
+        offset: Offset(0, 4),
+        blurRadius: 20,
+      ),
+      Shadow(
+        color: Colors.black45,
+        offset: Offset(0, 2),
+        blurRadius: 8,
+      ),
+    ],
+  ),
+  textAlign: TextAlign.center,
+),
                       
                       SizedBox(height: isSmallScreen ? 12 : 16),
                       
                       // Welcome Message
-                      Text(
-                        'Bienvenido a',
-                        style: (isSmallScreen 
-                          ? theme.textTheme.titleLarge 
-                          : theme.textTheme.headlineSmall)?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w300,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                      // Welcome Message (splash page style)
+Text(
+  'Bienvenido a',
+  style: TextStyle(
+    fontSize: isSmallScreen ? 18 : 22,
+    fontWeight: FontWeight.w600,
+    color: Colors.white.withValues(alpha: 0.9),
+    letterSpacing: 0.5,
+    shadows: const [
+      Shadow(
+        color: Colors.black54,
+        offset: Offset(0, 2),
+        blurRadius: 8,
+      ),
+    ],
+  ),
+  textAlign: TextAlign.center,
+),
                       
                       SizedBox(height: isSmallScreen ? 4 : 8),
                       
                       // App Name with Gradient
-                      ShaderMask(
-                        shaderCallback: (bounds) => LinearGradient(
-                          colors: [
-                            theme.colorScheme.primary,
-                            theme.colorScheme.secondary,
-                          ],
-                        ).createShader(bounds),
-                        child: Text(
-                          'Emprendimientos Gastronómicos',
-                          style: (isSmallScreen 
-                            ? theme.textTheme.headlineSmall 
-                            : theme.textTheme.headlineMedium)?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+                      // App Name (splash page style)
+Text(
+  'GastroStart',
+  style: TextStyle(
+    fontSize: isSmallScreen ? 36 : 46,
+    fontWeight: FontWeight.w900,
+    color: Colors.white,
+    letterSpacing: 1.5,
+    height: 1.0,
+    shadows: const [
+      Shadow(
+        color: Colors.black87,
+        offset: Offset(0, 4),
+        blurRadius: 20,
+      ),
+      Shadow(
+        color: Colors.black45,
+        offset: Offset(0, 2),
+        blurRadius: 8,
+      ),
+    ],
+  ),
+  textAlign: TextAlign.center,
+),
                       
                       SizedBox(height: isSmallScreen ? 16 : 24),
                       
                       // Subtitle
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          '¡Ya está todo listo! Exploremos las startups culinarias más innovadoras y descubramos juntos experiencias gastronómicas increíbles.',
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            height: 1.6,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+                      // Subtitle (splash page style)
+Container(
+  padding: const EdgeInsets.symmetric(horizontal: 24),
+  child: Text(
+    '¡Ya está todo listo! Exploremos las startups culinarias más innovadoras y descubramos juntos experiencias gastronómicas increíbles.',
+    style: TextStyle(
+      fontSize: isSmallScreen ? 14 : 15,
+      fontWeight: FontWeight.w600,
+      color: Colors.white.withValues(alpha: 0.9),
+      letterSpacing: 0.5,
+      height: 1.6,
+      shadows: const [
+        Shadow(
+          color: Colors.black54,
+          offset: Offset(0, 2),
+          blurRadius: 8,
+        ),
+      ],
+    ),
+    textAlign: TextAlign.center,
+  ),
+),
                       
                       SizedBox(height: isSmallScreen ? 32 : 48),
                       
@@ -301,6 +344,8 @@ class _GreetingPageState extends State<GreetingPage>
         // Continue Button
         CustomButton(
           text: '¡Comencemos!',
+          backgroundColor: Colors.white,
+          textColor: Theme.of(context).colorScheme.primary,
           onPressed: () {
             Navigator.of(context).pushReplacementNamed('/emprendimientos');
           },
@@ -328,61 +373,104 @@ class _GreetingPageState extends State<GreetingPage>
   }
 
   Widget _buildFeatureItem(
-    BuildContext context,
-    IconData icon,
-    String title,
-    String subtitle,
-    bool isSmallScreen,
-  ) {
-    final theme = Theme.of(context);
-    
-    return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 1000 + (title.hashCode % 500)),
-      tween: Tween(begin: 0.0, end: 1.0),
-      builder: (context, value, child) {
-        return Transform.translate(
-          offset: Offset(0, 20 * (1 - value)),
-          child: Opacity(
-            opacity: value,
-            child: Container(
-              width: isSmallScreen ? double.infinity : null,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    height: isSmallScreen ? 50 : 60,
-                    width: isSmallScreen ? 50 : 60,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      icon,
-                      color: theme.colorScheme.primary,
-                      size: isSmallScreen ? 24 : 28,
-                    ),
-                  ),
-                  SizedBox(height: isSmallScreen ? 6 : 8),
-                  Text(
-                    title,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+  BuildContext context,
+  IconData icon,
+  String title,
+  String subtitle,
+  bool isSmallScreen,
+) {
+  return TweenAnimationBuilder<double>(
+    duration: Duration(milliseconds: 1000 + (title.hashCode % 500)),
+    tween: Tween(begin: 0.0, end: 1.0),
+    builder: (context, value, child) {
+      return Transform.translate(
+        offset: Offset(0, 20 * (1 - value)),
+        child: Opacity(
+          opacity: value,
+          child: Container(
+            width: isSmallScreen ? double.infinity : 110,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.3),
+                width: 2,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  height: isSmallScreen ? 50 : 60,
+                  width: isSmallScreen ? 50 : 60,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFDB913).withValues(alpha: 0.3),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    icon,
+                    color: const Color(0xFFFDB913),
+                    size: isSmallScreen ? 26 : 30,
+                  ),
+                ),
+                SizedBox(height: isSmallScreen ? 8 : 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 15 : 16,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                    shadows: const [
+                      Shadow(
+                        color: Colors.black45,
+                        offset: Offset(0, 2),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: isSmallScreen ? 12 : 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.85),
+                    letterSpacing: 0.3,
+                    height: 1.3,
+                    shadows: const [
+                      Shadow(
+                        color: Colors.black26,
+                        offset: Offset(0, 1),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 }

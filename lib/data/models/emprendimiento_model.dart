@@ -60,7 +60,7 @@ class Emprendimiento {
   final bool isFavoritedByUser;
   final bool isLikedByUser;
 
-  Emprendimiento({
+  Emprendimiento ({
     required this.id,
     required this.nombre,
     required this.parroquia,

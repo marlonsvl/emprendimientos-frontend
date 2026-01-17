@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'dart:math' as math;
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_state.dart';
 
@@ -11,53 +12,105 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
+    with TickerProviderStateMixin {
+  late AnimationController _mainAnimationController;
+  late AnimationController _imageRotationController;
   late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _logoScaleAnimation;
+  
+  int _currentImageIndex = 0;
+  
+  // Curated selection of startup images
+  final List<String> _startupImages = [
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1768359127/UnitedFalafel_Vilcabamba_ext_web_ftnujh.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1768359390/Vilkalitas_Vilcabamba_extfront_web__eez84d.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1766455965/CafeyComidadeHogar_Vilcabamba_Fachada_web__j7awu1.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1768357853/LaCreperiadeYannick_Vilcabamba_fachadahrzt_web__pnoq7w.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1766456477/Dumplings_Noodles_Vilcabamba_Fachada_web_tnkzku.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1768442774/BambuRestaurante_Vilcabamba_ext_web__k82l3w.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1767124216/Olivo_Yangana_fachada_web__ytjsxg.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1764381322/TruchasCurishiroYangana_Fachada_web1_btrywj.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1766457048/Molino_Tropical_Vilcabamba_Identidad_web__cx5vf4.jpg',
+    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1762997368/PiedraDuraVilcabamba_Fachada_web_yabily.jpg'
+  ];
 
   @override
   void initState() {
     super.initState();
     _setupAnimations();
-    _navigateToNext();
+    _startImageRotation();
+    //_navigateToNext();
   }
 
   void _setupAnimations() {
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
+    _mainAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
+      vsync: this,
+    );
+
+    _imageRotationController = AnimationController(
+      duration: const Duration(milliseconds: 3000),
       vsync: this,
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+      CurvedAnimation(
+        parent: _mainAnimationController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
+      ),
     );
 
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainAnimationController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOutCubic),
+      ),
     );
 
-    _animationController.forward();
+    _logoScaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainAnimationController,
+        curve: const Interval(0.0, 0.7, curve: Curves.elasticOut),
+      ),
+    );
+
+    _mainAnimationController.forward();
   }
 
-  void _navigateToNext() {
-    Future.delayed(const Duration(seconds: 4), () {
+  void _startImageRotation() {
+    Future.delayed(const Duration(milliseconds: 3000), () {
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/welcome');
+        setState(() {
+          _currentImageIndex = (_currentImageIndex + 1) % _startupImages.length;
+        });
+        _imageRotationController.forward(from: 0.0);
+        _startImageRotation();
       }
     });
   }
 
+  /*void _navigateToNext() {
+    Future.delayed(const Duration(milliseconds: 3500), () {
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/welcome');
+      }
+    });
+
+  }*/
+  void _handleContinue() {
+    Navigator.of(context).pushReplacementNamed('/welcome');
+  }
+
   @override
   void dispose() {
-    _animationController.dispose();
+    _mainAnimationController.dispose();
+    _imageRotationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
 
     return BlocListener<AuthBloc, AuthState>(
@@ -70,169 +123,322 @@ class _SplashPageState extends State<SplashPage>
         body: Container(
           width: double.infinity,
           height: double.infinity,
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                theme.colorScheme.primary.withValues(alpha: 0.9),
-                theme.colorScheme.secondary.withValues(alpha: 0.7),
+                Color(0xFFFFF59D), // Light yellow
+                Color(0xFFFDD835), // Bright yellow
+                Color(0xFFFDB913), // Golden yellow
+                Color(0xFFF39C12), // Deep gold
               ],
+              stops: [0.0, 0.3, 0.6, 1.0],
             ),
           ),
           child: Stack(
             children: [
-              // Background Image Pattern
-              Positioned.fill(
-                child: Opacity(
-                  opacity: 0.1,
-                  child: Image.network(
-                    'https://res.cloudinary.com/djl0e1p6e/image/upload/v1762997368/PiedraDuraVilcabamba_Fachada_web_yabily.jpg',
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
+              // Background Image (fixed size, centered)
+              _buildBackgroundImage(size),
+              
 
-              // Animated Content
-              Center(
-                child: FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: SlideTransition(
-                    position: _slideAnimation,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // Logo Container with shadow effect
-                        Container(
-                          width: 140,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                              BoxShadow(
-                                color: Colors.white.withValues(alpha: 0.1),
-                                blurRadius: 10,
-                                offset: const Offset(0, -5),
-                              ),
-                            ],
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Colors.white.withValues(alpha: 0.25),
-                                Colors.white.withValues(alpha: 0.1),
-                              ],
-                            ),
-                          ),
-                          child: Icon(
-                            Icons.restaurant_menu,
-                            size: 70,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 40),
-
-                        // Main Title
-                        Text(
-                          'Emprendimientos\nGastronómicos',
-                          style: theme.textTheme.displayMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.5,
-                            height: 1.1,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Subtitle
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            'Descubre los mejores startups\ngastronómicos del mundo',
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.95),
-                              fontWeight: FontWeight.w500,
-                              height: 1.4,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Loading Indicator
-              Positioned(
-                bottom: 60,
-                left: 0,
-                right: 0,
+              // Main Content
+              SafeArea(
                 child: Column(
                   children: [
-                    SizedBox(
-                      width: 50,
-                      height: 50,
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.white.withValues(alpha: 0.8),
-                        ),
-                        strokeWidth: 2.5,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Cargando...',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    const SizedBox(height: 10),
+                    
+                    // Logo and Branding
+                    _buildBranding(),
+                    
+                    const Spacer(),
+                    
+                    // Continue Button
+                    _buildContinueButton(size),
+                    
+                    const SizedBox(height: 40),
                   ],
                 ),
               ),
 
-              // Decorative Elements
-              Positioned(
-                top: 50,
-                right: 30,
-                child: Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                bottom: 150,
-                left: 20,
-                child: Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
+              // Decorative floating elements
+              _buildFloatingElements(),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBackgroundImage(Size size) {
+  // Calculate fixed dimensions for consistent image display
+  final imageHeight = size.height * 0.50; // 50% of screen height
+  final imageWidth = size.width; // Full width
+  
+  return Positioned(
+    top: size.height * 0.30, // Position from top
+    left: 0,
+    right: 0,
+    child: FadeTransition(
+      opacity: _fadeAnimation,
+      child: Center(
+        child: Container(
+          width: imageWidth,
+          height: imageHeight,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(0), // No border radius for full-width
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
+                blurRadius: 30,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(15),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 2500),
+              switchInCurve: Curves.easeIn,
+              switchOutCurve: Curves.easeOut,
+              child: Image.network(
+                _startupImages[_currentImageIndex],
+                key: ValueKey<int>(_currentImageIndex),
+                width: imageWidth,
+                height: imageHeight,
+                fit: BoxFit.cover, // Ensures consistent sizing
+                opacity: const AlwaysStoppedAnimation(1.0),
+                errorBuilder: (context, error, stackTrace) => SizedBox(
+                  width: imageWidth,
+                  height: imageHeight,
+                  //color: Colors.black.withValues(alpha: 0.1),
+                  child: const Icon(
+                    Icons.restaurant,
+                    size: 80,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+  
+
+  Widget _buildBranding() {
+  return 
+  
+  FadeTransition(
+    opacity: _fadeAnimation,
+    child: ScaleTransition(
+      scale: _logoScaleAnimation,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        
+        child: Column(
+          children: [
+            // Logo with animated pulse effect
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFFFDB913).withValues(alpha: 0.5),
+                    blurRadius: 40,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Image.asset(
+                    'lib/images/logo.png',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // App Name
+            const Text(
+              'GastroStart',
+              style: TextStyle(
+                fontSize: 40,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: 1.5,
+                height: 1.0,
+                shadows: [
+                  Shadow(
+                    color: Colors.black87,
+                    offset: Offset(0, 4),
+                    blurRadius: 20,
+                  ),
+                  Shadow(
+                    color: Colors.black45,
+                    offset: Offset(0, 2),
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 5),
+
+            // Tagline with icon
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.star_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Emprendimientos Gastronómicos',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white.withValues(alpha: 0.95),
+                    letterSpacing: 0.8,
+                    shadows: const [
+                      Shadow(
+                        color: Colors.black54,
+                        offset: Offset(0, 2),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _buildContinueButton(Size size) {
+  return FadeTransition(
+    opacity: _fadeAnimation,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        children: [
+          // Optional: Rotating business name indicator
+          Text(
+            'Descubre historias de éxito',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.9),
+              letterSpacing: 0.5,
+              shadows: const [
+                Shadow(
+                  color: Colors.black54,
+                  offset: Offset(0, 2),
+                  blurRadius: 6,
+                ),
+              ],
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+          
+          // Continuar Button
+          SizedBox(
+            width: size.width * 0.75,
+            child: ElevatedButton(
+              onPressed: _handleContinue,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFFFDB913),
+                padding: const EdgeInsets.symmetric(vertical: 18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                elevation: 10,
+                shadowColor: Colors.black.withValues(alpha: 0.4),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    'Continuar',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  SizedBox(width: 10),
+                  Icon(Icons.arrow_forward_rounded, size: 24),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+ 
+
+  Widget _buildFloatingElements() {
+    return Stack(
+      children: [
+        Positioned(
+          top: 60,
+          right: 25,
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 2,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 140,
+          left: 35,
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: Container(
+              width: 35,
+              height: 35,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.15),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -641,7 +641,7 @@ class EmprendimientoCard extends StatelessWidget {
             color: Theme.of(context).colorScheme.primary,
           ),
           Text(
-            '\$${emprendimiento.precioPromedio.toStringAsFixed(2)}',
+            emprendimiento.precioPromedio.toStringAsFixed(2),
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: Theme.of(context).colorScheme.primary,
