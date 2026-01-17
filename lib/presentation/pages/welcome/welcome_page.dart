@@ -33,14 +33,17 @@ class WelcomePage extends StatelessWidget {
             return Container(
               width: double.infinity,
               height: double.infinity,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    theme.colorScheme.primary.withValues(alpha: 0.8),
-                    theme.colorScheme.secondary.withValues(alpha: 0.6),
+                    Color(0xFFFFF59D), // Light yellow
+                    Color(0xFFFDD835), // Bright yellow
+                    Color(0xFFFDB913), // Golden yellow
+                    Color(0xFFF39C12), // Deep gold
                   ],
+                  stops: [0.0, 0.3, 0.6, 1.0],
                 ),
               ),
               child: SafeArea(
@@ -184,7 +187,14 @@ class WelcomePage extends StatelessWidget {
           flex: 2,
           child: Container(
             decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFFFDB913).withValues(alpha: 0.3),
+                  const Color(0xFFF39C12).withValues(alpha: 0.3),
+                ],
+              ),
               borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(config.borderRadius),
                 bottomLeft: Radius.circular(config.borderRadius),
@@ -232,23 +242,33 @@ class WelcomePage extends StatelessWidget {
         Hero(
           tag: 'app_logo',
           child: Container(
-            height: config.logoSize,
-            width: config.logoSize,
+            width: config.logoSize * 1.4,
+            height: config.logoSize * 0.8,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(20),
+              color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.1),
-                  blurRadius: 20,
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 30,
                   offset: const Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: const Color(0xFFFDB913).withValues(alpha: 0.5),
+                  blurRadius: 40,
+                  spreadRadius: 5,
                 ),
               ],
             ),
-            child: Icon(
-              Icons.restaurant_menu,
-              size: config.logoSize * 0.5,
-              color: Colors.white,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Image.asset(
+                  'lib/images/logo.png',
+                  fit: BoxFit.contain,
+                ),
+              ),
             ),
           ),
         ),
@@ -256,13 +276,27 @@ class WelcomePage extends StatelessWidget {
         SizedBox(height: 32 * config.spacingMultiplier),
         
         // Title
+        // Title (splash page style)
         Text(
-          'Emprendimientos\nGastronómicos',
-          style: theme.textTheme.displayMedium?.copyWith(
+          'GastroStart',
+          style: TextStyle(
             fontSize: config.titleSize,
+            fontWeight: FontWeight.w900,
             color: Colors.white,
-            fontWeight: FontWeight.bold,
-            height: 1.2,
+            letterSpacing: 1.5,
+            height: 1.0,
+            shadows: const [
+              Shadow(
+                color: Colors.black87,
+                offset: Offset(0, 4),
+                blurRadius: 20,
+              ),
+              Shadow(
+                color: Colors.black45,
+                offset: Offset(0, 2),
+                blurRadius: 8,
+              ),
+            ],
           ),
           textAlign: TextAlign.center,
         ),
@@ -272,11 +306,20 @@ class WelcomePage extends StatelessWidget {
           
           // Subtitle
           Text(
-            'Descubra increíbles startups gastronómicos\ne innovaciones culinarias',
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: Colors.white.withValues(alpha: 0.9),
+            'Descubre increíbles startups gastronómicos\ne innovaciones culinarias',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.white.withValues(alpha: 0.85),
+              letterSpacing: 0.5,
               height: 1.5,
-              fontSize: 16,
+              shadows: const [
+                Shadow(
+                  color: Colors.black38,
+                  offset: Offset(0, 1),
+                  blurRadius: 4,
+                ),
+              ],
             ),
             textAlign: TextAlign.center,
           ),
@@ -288,100 +331,164 @@ class WelcomePage extends StatelessWidget {
   }
 
   Widget _buildBottomSection(
-    BuildContext context,
-    ThemeData theme,
-    ResponsiveConfig config,
-  ) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(config.borderRadius),
-          topRight: Radius.circular(config.borderRadius),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -10),
-          ),
-        ],
-      ),
-      child: Padding(
+      BuildContext context,
+      ThemeData theme,
+      ResponsiveConfig config,
+    ) {
+      return Padding(
         padding: EdgeInsets.symmetric(
           horizontal: config.horizontalPadding,
           vertical: config.verticalPadding,
         ),
         child: _buildActionButtons(context, theme, config),
-      ),
-    );
+      );
   }
 
   Widget _buildActionButtons(
-    BuildContext context,
-    ThemeData theme,
-    ResponsiveConfig config, {
-    bool isCompact = false,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (!isCompact) SizedBox(height: 8 * config.spacingMultiplier),
-        
-        // Sign In Button
-        CustomButton(
-          text: 'Iniciar sesión',
+  BuildContext context,
+  ThemeData theme,
+  ResponsiveConfig config, {
+  bool isCompact = false,
+}) {
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (!isCompact) SizedBox(height: 8 * config.spacingMultiplier),
+      
+      // Sign In Button (splash page style)
+      SizedBox(
+        width: double.infinity,
+        child: ElevatedButton(
           onPressed: () {
             Navigator.of(context).pushNamed('/login');
           },
-          width: double.infinity,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white,
+            foregroundColor: const Color(0xFFFDB913),
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+            elevation: 10,
+            shadowColor: Colors.black.withValues(alpha: 0.4),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                'Iniciar sesión',
+                style: TextStyle(
+                  fontSize: isCompact ? 17 : 19,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Icon(Icons.arrow_forward_rounded, size: 24),
+            ],
+          ),
         ),
-        
-        SizedBox(height: 16 * config.spacingMultiplier),
-        
-        // Create Account Button
-        CustomButton(
-          text: 'Crear cuenta',
+      ),
+      
+      SizedBox(height: 16 * config.spacingMultiplier),
+      
+      // Create Account Button (splash page style)
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton(
           onPressed: () {
             Navigator.of(context).pushNamed('/register');
           },
-          isOutlined: true,
-          width: double.infinity,
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Colors.white.withValues(alpha: 0.1),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.4), width: 2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.person_add_outlined, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                'Crear cuenta',
+                style: TextStyle(
+                  fontSize: isCompact ? 16 : 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
         ),
-        
-        SizedBox(height: 16 * config.spacingMultiplier),
+      ),
+      
+      SizedBox(height: 16 * config.spacingMultiplier),
 
-        CustomButton(
-          text: 'Continuar como invitado',
+      // Guest Button (splash page style)
+      SizedBox(
+        width: double.infinity,
+        child: OutlinedButton(
           onPressed: () {
             context.read<AuthBloc>().add(GuestLoginRequested());
           },
-          isOutlined: true,
-          icon: const Icon(Icons.visibility),
-          width: double.infinity,
-        ),
-
-        SizedBox(height: 24 * config.spacingMultiplier),
-        
-        
-        // Terms and Privacy
-        Text(
-          'Al continuar, aceptas nuestros Términos de servicio\ny Política de privacidad.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            height: 1.4,
-            fontSize: isCompact ? 11 : 12,
+          style: OutlinedButton.styleFrom(
+            backgroundColor: Colors.white.withValues(alpha: 0.1),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.4), width: 2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
           ),
-          textAlign: TextAlign.center,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.visibility_outlined, size: 22),
+              const SizedBox(width: 10),
+              Text(
+                'Continuar como invitado',
+                style: TextStyle(
+                  fontSize: isCompact ? 16 : 17,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
         ),
-        
-        if (!isCompact) SizedBox(height: 8 * config.spacingMultiplier),
-      ],
-    );
-  }
+      ),
+
+      SizedBox(height: 24 * config.spacingMultiplier),
+      
+      // Terms and Privacy (splash page style)
+      Text(
+        'Al continuar, aceptas nuestros Términos de servicio\ny Política de privacidad.',
+        style: TextStyle(
+          fontSize: isCompact ? 11 : 12,
+          fontWeight: FontWeight.w500,
+          color: Colors.white.withValues(alpha: 0.7),
+          height: 1.4,
+          letterSpacing: 0.3,
+          shadows: const [
+            Shadow(
+              color: Colors.black26,
+              offset: Offset(0, 1),
+              blurRadius: 2,
+            ),
+          ],
+        ),
+        textAlign: TextAlign.center,
+        maxLines: 3,
+      ),
+      
+      if (!isCompact) SizedBox(height: 8 * config.spacingMultiplier),
+    ],
+  );
+}
 }
 
 // Helper classes for responsive configuration

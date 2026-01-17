@@ -1,7 +1,12 @@
+import 'dart:math';
+
 import 'package:emprendegastroloja/core/constants/api_constants.dart';
 import 'package:emprendegastroloja/data/datasources/local/auth_local_datasource.dart';
+import 'package:emprendegastroloja/data/datasources/local/emprendimientos_local_datasource.dart';
+import 'package:emprendegastroloja/data/datasources/remote/emprendimientos_remote_datasource.dart';
 import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
 import 'package:emprendegastroloja/domain/repositories/comment_repository.dart';
+import 'package:emprendegastroloja/domain/repositories/emprendimientos_repository.dart';
 import 'package:emprendegastroloja/domain/usecases/auth/get_current_user_usecase.dart';
 import 'package:emprendegastroloja/presentation/bloc/auth/auth_bloc.dart';
 import 'package:emprendegastroloja/presentation/bloc/auth/auth_state.dart';
@@ -18,6 +23,22 @@ import 'package:latlong2/latlong.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cached_video_player_plus/cached_video_player_plus.dart';
+
+// Add after imports, before the class definition
+class BrandColors {
+  static const lightYellow = Color(0xFFFFF59D);
+  static const brightYellow = Color(0xFFFDD835);
+  static const goldenYellow = Color(0xFFFDB913);
+  static const deepGold = Color(0xFFF39C12);
+  
+  static const gradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [lightYellow, brightYellow, goldenYellow, deepGold],
+    stops: [0.0, 0.3, 0.6, 1.0],
+  );
+}
+
 
 class EmprendimientoDetailPage extends StatefulWidget {
   final Emprendimiento emprendimiento;
@@ -38,7 +59,7 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
     with TickerProviderStateMixin {
   late TabController _tabController;
   late CarouselSliderController _carouselController;
-  late final CachedVideoPlayerPlus _player;
+  CachedVideoPlayerPlus? _player;
 
   int _currentImageIndex = 0;
 
@@ -50,6 +71,7 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
   late Animation<double> _fabAnimation;
 
   late final List<String> _allImages;
+  String? _authToken;
   
 
   CommentRepository? _commentRepository;
@@ -68,28 +90,61 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
   int _likesCount = 0;
   bool _isFavorited = false;
   double _userRating = 0.0;
+  late Emprendimiento _currentEmprendimiento;
   bool _showFullDescription = false;
   String? _errorMessage;
   int? _currentUserId;
+  EmprendimientosRepository? _repository;
 
   final ValueNotifier<bool> _isLikedNotifier = ValueNotifier(false);
   final ValueNotifier<int> _likesCountNotifier = ValueNotifier(0);
   final ValueNotifier<bool> _isFavoritedNotifier = ValueNotifier(false);
 
-  
+  Future<void> _initializeRepository() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final tokenResult = await widget.authRepository.getAuthToken();
+    
+    _authToken = tokenResult.fold(
+      (failure) {
+        debugPrint('Auth token error: ${failure.toString()}');
+        return null;
+      },
+      (token) => token,
+    );
+
+    _repository = EmprendimientosRepository(
+      remoteDataSource: EmprendimientosRemoteDataSource(
+        baseUrl: ApiConstants.baseUrl,
+      ),
+      localDataSource: EmprendimientosLocalDataSource(
+        sharedPreferences: prefs,
+      ),
+    );
+  } catch (e) {
+    debugPrint('Repository initialization error: $e');
+    rethrow;
+  }
+}
 
   @override
   void initState() {
     super.initState();
+    _currentEmprendimiento = widget.emprendimiento;
     _allImages = widget.emprendimiento.galleryUrls
       .map((url) => url.replaceAll(RegExp(r'[{}]'), '').trim())
       .where((url) => url.isNotEmpty)
       .toList();
     _setupControllers();
     _initializeVideoPlayer();
+    _initializeRepository();
     _initializeData();
+
     _carouselController = CarouselSliderController();
     _mapController = MapController();
+
+    _initializeAuth();
+
     _getCurrentUserUseCase = GetCurrentUserUseCase(widget.authRepository);
     _getCurrentUserUseCase.repository.getCurrentUser().then((result) {
       result.fold((failure) {}, (user) {
@@ -110,6 +165,45 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
 
   }
 
+  Future<void> _initializeAuth() async {
+  if (_isGuestUser) {
+    _authToken = null;
+    return;
+  }
+  
+  final tokenResult = await widget.authRepository.getAuthToken();
+  _authToken = tokenResult.fold(
+    (failure) {
+      debugPrint('Auth token error: ${failure.toString()}');
+      return null;
+    },
+    (token) {
+      debugPrint('Token loaded successfully');
+      return token;
+    },
+  );
+}
+
+Future<bool> _ensureValidToken() async {
+  if (_isGuestUser) return false;
+  
+  if (_authToken == null || _authToken!.isEmpty) {
+    final tokenResult = await widget.authRepository.getAuthToken();
+    _authToken = tokenResult.fold(
+      (failure) {
+        debugPrint('Token refresh failed: ${failure.toString()}');
+        return null;
+      },
+      (token) {
+        debugPrint('Token refreshed successfully');
+        return token;
+      },
+    );
+  }
+  
+  return _authToken != null && _authToken!.isNotEmpty;
+}
+
   // Better initialization with proper error handling
 void _initializeVideoPlayer() {
   if (!widget.emprendimiento.hasVideo) return;
@@ -122,12 +216,12 @@ void _initializeVideoPlayer() {
     invalidateCacheIfOlderThan: const Duration(hours: 1),
   );
 
-  _player.initialize().then((_) {
+  _player?.initialize().then((_) {
     if (!mounted) return;
-    _player.controller.addListener(_controllerListener);
+    _player?.controller.addListener(_controllerListener);
     if (mounted) {
       setState(() {});
-      _player.controller.play();
+      _player?.controller.play();
     }
   }).catchError((error) {
     if (mounted) {
@@ -139,7 +233,7 @@ void _initializeVideoPlayer() {
 }
 
   void _controllerListener() {
-  if (_player.controller.value.isInitialized) {
+  if (_player!.controller.value.isInitialized) {
     setState(() {});
   }
 }
@@ -225,9 +319,9 @@ void _initializeVideoPlayer() {
 
   @override
   void dispose() {
-    _player.controller.removeListener(_controllerListener);
-    _player.controller.pause();
-    _player.controller.dispose();
+    _player?.controller.removeListener(_controllerListener);
+    _player?.controller.pause();
+    _player?.controller.dispose();
 
     _mapController?.dispose();
     _tabController.dispose();
@@ -244,7 +338,10 @@ void _initializeVideoPlayer() {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return 
+    
+    Scaffold(
+      backgroundColor: Colors.grey[50], 
       body: NotificationListener<ScrollNotification>(
         child: DefaultTabController(
           length: 4,
@@ -526,6 +623,18 @@ void _initializeVideoPlayer() {
       pinned: true,
       elevation: 0,
       backgroundColor: Colors.transparent,
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () {
+          // Return updated data when back button is pressed
+          Navigator.of(context).pop({
+            'emprendimiento_id': widget.emprendimiento.id,
+            'is_favorited': _isFavoritedNotifier.value,
+            'is_liked': _isLikedNotifier.value,
+            'likes_count': _likesCountNotifier.value,
+          });
+        },
+      ),
       flexibleSpace: FlexibleSpaceBar(
         background: Stack(
           fit: StackFit.expand,
@@ -796,217 +905,486 @@ void _initializeVideoPlayer() {
   }
 
   Widget _buildInfoHeader() {
-    return SliverToBoxAdapter(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title and rating
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.emprendimiento.nombre,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Por ${widget.emprendimiento.propietario}',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
+  return SliverToBoxAdapter(
+    child: Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Text(
+            widget.emprendimiento.nombre,
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              fontSize: 24,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          
+          // Owner and Category Row
+          Row(
+            children: [
+              Expanded(
+                child: Row(
                   children: [
-                    //_buildRatingDisplay(),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getCategoryColor(
-                          widget.emprendimiento.categoria,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                    const Icon(Icons.person, size: 16, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Flexible(
                       child: Text(
-                        widget.emprendimiento.categoryDisplayName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                        widget.emprendimiento.propietario,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
                         ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Description
-            Text(
-              widget.emprendimiento.oferta,
-              style: Theme.of(context).textTheme.bodyLarge,
-              maxLines: _showFullDescription ? null : 3,
-              overflow: _showFullDescription ? null : TextOverflow.ellipsis,
-            ),
-            if (widget.emprendimiento.oferta.length > 150)
-              TextButton(
-                onPressed: () => setState(
-                  () => _showFullDescription = !_showFullDescription,
-                ),
-                child: Text(_showFullDescription ? 'Ver menos' : 'Ver más'),
               ),
-
-            const SizedBox(height: 16),
-
-            // Quick info cards
-            Row(
-              children: [
-                Expanded(
-                  child: _buildInfoCard(
-                    Icons.location_on,
-                    'Ubicación',
-                    '${widget.emprendimiento.parroquia}, ${widget.emprendimiento.sector}',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildInfoCard(
-                    Icons.access_time,
-                    'Horario',
-                    widget.emprendimiento.horario,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            Row(
-              children: [
-                if (widget.emprendimiento.precioPromedio > 0)
-                  Expanded(
-                    child: _buildInfoCard(
-                      Icons.attach_money,
-                      'Precio promedio',
-                      '\$${widget.emprendimiento.precioPromedio.toStringAsFixed(2)}',
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  gradient: BrandColors.gradient,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: BrandColors.goldenYellow.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
-                  ),
-                if (widget.emprendimiento.precioPromedio > 0)
-                  const SizedBox(width: 12),
-                Expanded(
-                  child: _buildInfoCard(
-                    Icons.table_restaurant,
-                    'Capacidad',
-                    '${widget.emprendimiento.plazas} plazas',
-                  ),
+                  ],
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _makePhoneCall,
-                    icon: const Icon(Icons.phone),
-                    label: const Text('Llamar'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _getStarsFromPriority(widget.emprendimiento.categoryPriority),
+                      style: const TextStyle(fontSize: 12),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _sendWhatsApp,
-                    icon: const Icon(Icons.message),
-                    label: const Text('WhatsApp'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // Like and comment stats
-            /*Row(
-              children: [
-                IconButton(
-                  onPressed: _toggleLike,
-                  icon: Icon(
-                    _isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: _isLiked ? Colors.red : null,
-                  ),
-                ),
-                Text('$_likesCount me gusta'),
-                const SizedBox(width: 16),
-                Icon(
-                  Icons.comment,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-                const SizedBox(width: 4),
-                Text('${_comments.length} comentarios'),
-              ],
-            ),*/
-            Row(
-              children: [
-                ValueListenableBuilder<bool>(
-                  valueListenable: _isLikedNotifier,
-                  builder: (context, isLiked, child) {
-                    return IconButton(
-                      onPressed: _toggleLike,
-                      icon: Icon(
-                        isLiked ? Icons.favorite : Icons.favorite_border,
-                        color: isLiked ? Colors.red : null,
+                    const SizedBox(width: 6),
+                    Text(
+                      widget.emprendimiento.categoryDisplayName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Tipo and Oferta
+          if (widget.emprendimiento.tipo?.isNotEmpty ?? false)
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.store, size: 16, color: Colors.blue.shade700),
+                  const SizedBox(width: 8),
+                  Text(
+                    widget.emprendimiento.tipo!,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blue.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // Oferta/Description
+          if (widget.emprendimiento.oferta.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.orange.shade50, Colors.orange.shade100],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.local_offer, color: Colors.orange.shade700, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Oferta Especial',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          widget.emprendimiento.oferta,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.orange.shade900,
+                            height: 1.4,
+                          ),
+                          maxLines: _showFullDescription ? null : 3,
+                          overflow: _showFullDescription ? null : TextOverflow.ellipsis,
+                        ),
+                        if (widget.emprendimiento.oferta.length > 100)
+                          TextButton(
+                            onPressed: () => setState(() => 
+                              _showFullDescription = !_showFullDescription
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 30),
+                            ),
+                            child: Text(
+                              _showFullDescription ? 'Ver menos' : 'Ver más',
+                              style: TextStyle(color: Colors.orange.shade700),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 16),
+
+          // Stats Row: Price, Likes, Comments
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                // Price
+                _buildStatItem(
+                  icon: Icons.attach_money,
+                  label: 'Precio',
+                  value: '\$${widget.emprendimiento.precioPromedio.toStringAsFixed(2)}',
+                  color: Colors.green,
+                ),
+                Container(width: 1, height: 40, color: Colors.grey.shade300),
+                
+                // Likes
                 ValueListenableBuilder<int>(
                   valueListenable: _likesCountNotifier,
                   builder: (context, likesCount, child) {
-                    return Text('$likesCount me gusta');
+                    return _buildStatItem(
+                      icon: Icons.favorite,
+                      label: 'Me gusta',
+                      value: '$likesCount',
+                      color: Colors.red,
+                    );
                   },
                 ),
-                const SizedBox(width: 16),
-                Icon(
-                  Icons.comment,
-                  size: 20,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                Container(width: 1, height: 40, color: Colors.grey.shade300),
+                
+                // Comments
+                _buildStatItem(
+                  icon: Icons.comment,
+                  label: 'Comentarios',
+                  value: '${_comments.length}',
+                  color: Colors.blue,
                 ),
-                const SizedBox(width: 4),
-                Text('${_comments.length} comentarios'),
               ],
             ),
+          ),
 
+          const SizedBox(height: 16),
 
-          ],
+          // Quick Info Grid
+          Row(
+            children: [
+              Expanded(
+                child: _buildEnhancedInfoCard(
+                  Icons.location_on,
+                  'Ubicación',
+                  '${widget.emprendimiento.parroquia}',
+                  '${widget.emprendimiento.sector}',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildEnhancedInfoCard(
+                  Icons.access_time,
+                  'Horario',
+                  widget.emprendimiento.horario,
+                  null,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Expanded(
+                child: _buildEnhancedInfoCard(
+                  Icons.table_restaurant,
+                  'Capacidad',
+                  '${widget.emprendimiento.plazas} personas',
+                  widget.emprendimiento.mesas > 0 
+                    ? '${widget.emprendimiento.mesas} mesas'
+                    : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildEnhancedInfoCard(
+                  Icons.timer,
+                  'Experiencia',
+                  '${widget.emprendimiento.experiencia} años',
+                  widget.emprendimiento.tiempoTrabajando > 0
+                    ? '${widget.emprendimiento.tiempoTrabajando} años operando'
+                    : null,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // Action Buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _makePhoneCall,
+                  icon: const Icon(Icons.phone, size: 20),
+                  label: const Text('Llamar'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                    backgroundColor: BrandColors.goldenYellow,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _sendWhatsApp,
+                  icon: const Icon(Icons.message, size: 20),
+                  label: const Text('WhatsApp'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: const BorderSide(color: BrandColors.goldenYellow, width: 2),
+                    foregroundColor: BrandColors.goldenYellow,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // Like Button (Full Width)
+          SizedBox(
+            width: double.infinity,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _isLikedNotifier,
+              builder: (context, isLiked, child) {
+                return OutlinedButton.icon(
+                  onPressed: _toggleLike,
+                  icon: Icon(
+                    isLiked ? Icons.favorite : Icons.favorite_border,
+                    color: isLiked ? Colors.red : Colors.grey[600],
+                  ),
+                  label: Text(
+                    isLiked ? 'Te gusta' : 'Me gusta',
+                    style: TextStyle(
+                      color: isLiked ? Colors.red : Colors.grey[700],
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    side: BorderSide(
+                      color: isLiked ? Colors.red : Colors.grey.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+// Helper method for stats
+Widget _buildStatItem({
+  required IconData icon,
+  required String label,
+  required String value,
+  required Color color,
+}) {
+  return Column(
+    children: [
+      Icon(icon, color: color, size: 24),
+      const SizedBox(height: 6),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: color,
         ),
       ),
-    );
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.grey[600],
+        ),
+      ),
+    ],
+  );
+}
+
+// Enhanced info card
+Widget _buildEnhancedInfoCard(
+  IconData icon,
+  String label,
+  String value,
+  String? subtitle,
+) {
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.grey.shade200),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.03),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: BrandColors.lightYellow.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                icon,
+                size: 18,
+                color: BrandColors.deepGold,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[600],
+                  letterSpacing: 0.3,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+            height: 1.3,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey[600],
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+// Add helper for stars
+String _getStarsFromPriority(int priority) {
+  switch (priority) {
+    case 1:
+      return '⭐';
+    case 2:
+      return '⭐⭐';
+    case 3:
+      return '⭐⭐⭐';
+    default:
+      return '';
   }
+}
 
   Widget _buildInfoCard(IconData icon, String label, String value) {
     return Container(
@@ -1075,26 +1453,42 @@ void _initializeVideoPlayer() {
   }
 
   Widget _buildTabBar() {
-    return SliverToBoxAdapter(
-      child: Container(
-        color: Theme.of(context).colorScheme.surface,
-        child: TabBar(
-          controller: _tabController,
-          labelColor: Theme.of(context).colorScheme.primary,
-          unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
-          indicatorColor: Theme.of(context).colorScheme.primary,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: 'Detalles', icon: Icon(Icons.info)),
-            Tab(text: 'Menú', icon: Icon(Icons.restaurant_menu)),
-            Tab(text: 'Ubicación', icon: Icon(Icons.map)),
-            Tab(text: 'Reseñas', icon: Icon(Icons.reviews)),
-          ],
-        ),
+  return SliverToBoxAdapter(
+    child: Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-    );
-  }
-
+      child: TabBar(
+        controller: _tabController,
+        labelColor: BrandColors.goldenYellow,
+        unselectedLabelColor: Colors.grey[600],
+        indicatorColor: BrandColors.goldenYellow,
+        indicatorWeight: 3,
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 13,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontWeight: FontWeight.w500,
+          fontSize: 13,
+        ),
+        tabs: const [
+          Tab(text: 'Detalles', icon: Icon(Icons.info_outline, size: 20)),
+          Tab(text: 'Menú', icon: Icon(Icons.restaurant_menu, size: 20)),
+          Tab(text: 'Ubicación', icon: Icon(Icons.map_outlined, size: 20)),
+          Tab(text: 'Reseñas', icon: Icon(Icons.reviews_outlined, size: 20)),
+        ],
+      ),
+    ),
+  );
+}
   Widget _buildVideoSection() {
     return VideoPlayerSection(videoUrl: widget.emprendimiento.videoUrl ?? '');
   }
@@ -2017,64 +2411,104 @@ void _initializeVideoPlayer() {
   }
 
   Widget _buildSection(String title, IconData icon, List<Widget> children) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+  return Container(
+    margin: const EdgeInsets.only(bottom: 20),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.grey.shade200),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                BrandColors.lightYellow.withOpacity(0.2),
+                BrandColors.brightYellow.withOpacity(0.1),
+              ],
+            ),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          ),
+          child: Row(
             children: [
-              Icon(icon, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: BrandColors.gradient,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.3,
+                  ),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: children,
-            ),
+        ),
+        // Content
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: children,
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
-              ),
+  if (value.isEmpty || value == 'null') return const SizedBox.shrink();
+  
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 140,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[700],
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(value, style: Theme.of(context).textTheme.bodySmall),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              height: 1.4,
+            ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildDetailText(String text) {
     return Text(text, style: Theme.of(context).textTheme.bodyMedium);
@@ -2195,25 +2629,121 @@ void _initializeVideoPlayer() {
   }
 
   // Action methods
-  void _toggleFavorite() {
-    if (_isGuestUser) {
-      _showLoginPrompt('agregar a favoritos');
-      return;
-    }
-    setState(() {
-      _isFavorited = !_isFavorited;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isFavorited ? 'Agregado a favoritos' : 'Removido de favoritos',
-        ),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  Future<void> _toggleFavorite() async {
+  debugPrint('=== Toggle Favorite Debug ===');
+  debugPrint('Is Guest: $_isGuestUser');
+  debugPrint('Token exists: ${_authToken != null}');
+  
+  if (_isGuestUser) {
+    _showLoginPrompt('agregar a favoritos');
+    return;
   }
+  
+  // Ensure we have a valid token
+  final hasValidToken = await _ensureValidToken();
+  if (!hasValidToken) {
+    _showErrorSnackbar('Error de autenticación. Inicia sesión nuevamente.');
+    Navigator.pushReplacementNamed(context, '/login');
+    return;
+  }
+
+  // Store original state
+  final originalFavoritedState = _isFavoritedNotifier.value;
+  
+  try {
+    // Optimistic update
+    _isFavoritedNotifier.value = !_isFavoritedNotifier.value;
+    _isLikedNotifier.value = _isFavoritedNotifier.value; // Add this line
+    _likesCountNotifier.value += _isFavoritedNotifier.value ? 1 : -1; // Add this line
+    
+    // Update the local emprendimiento object
+    setState(() {
+      _currentEmprendimiento = _currentEmprendimiento.copyWith(
+        isFavoritedByUser: _isFavoritedNotifier.value,
+        
+      );
+    });
+    
+    debugPrint('About to call toggleLike with:');
+    debugPrint('  - Emprendimiento ID: ${_currentEmprendimiento.id}');
+    debugPrint('  - Token: ${_authToken?.substring(0, min(20, _authToken?.length ?? 0))}...');
+    debugPrint('  - Repository initialized: ${_repository != null}');
+    final success = await _repository!.toggleLike(
+      _currentEmprendimiento.id, 
+      _authToken!,
+    );
+    
+    if (!success) {
+      // Revert on failure
+      _isFavoritedNotifier.value = originalFavoritedState;
+      _isLikedNotifier.value = originalFavoritedState; // Add this line
+      _likesCountNotifier.value -= _isFavoritedNotifier.value ? 1 : -1; // Add this line
+      setState(() {
+        _currentEmprendimiento = _currentEmprendimiento.copyWith(
+          isFavoritedByUser: originalFavoritedState,
+        );
+      });
+      _showErrorSnackbar('Error al actualizar favoritos');
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  _isFavoritedNotifier.value ? Icons.favorite : Icons.favorite_border,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  _isFavoritedNotifier.value 
+                    ? 'Agregado a favoritos' 
+                    : 'Removido de favoritos',
+                ),
+              ],
+            ),
+            backgroundColor: _isFavoritedNotifier.value ? Colors.red : Colors.grey[700],
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
+  } catch (e) {
+    // Revert on exception
+    _isFavoritedNotifier.value = originalFavoritedState;
+    _isLikedNotifier.value = originalFavoritedState; // Add this line
+    _likesCountNotifier.value -= _isFavoritedNotifier.value ? 1 : -1; // Add this line
+    setState(() {
+      _currentEmprendimiento = _currentEmprendimiento.copyWith(
+        isFavoritedByUser: originalFavoritedState,
+      );
+    });
+    
+    debugPrint('Toggle favorite error: $e');
+    
+    final errorMessage = e.toString().toLowerCase();
+    
+    if (errorMessage.contains('token') || 
+        errorMessage.contains('401') || 
+        errorMessage.contains('unauthorized')) {
+      
+      _showErrorSnackbar('Sesión expirada. Por favor inicia sesión nuevamente.');
+      _authToken = null;
+      await widget.authRepository.logout();
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    } else {
+      _showErrorSnackbar('Error al actualizar favoritos: ${e.toString()}');
+    }
+  }
+}
 
   /*void _toggleLike() {
     setState(() {
@@ -2235,21 +2765,101 @@ void _initializeVideoPlayer() {
     );
   }*/
 
-  void _toggleLike() {
-    if (_isGuestUser) {
-      _showLoginPrompt('dar like');
-      return;
-    }
+  Future<void> _toggleLike() async {
+  debugPrint('=== Toggle Like Debug ===');
+  debugPrint('Is Guest: $_isGuestUser');
+  debugPrint('Token exists: ${_authToken != null}');
+  
+  // Check if user is guest
+  if (_isGuestUser) {
+    _showLoginPrompt('dar like');
+    return;
+  }
+  
+  // Ensure we have a valid token
+  final hasValidToken = await _ensureValidToken();
+  if (!hasValidToken) {
+    _showErrorSnackbar('Error de autenticación. Inicia sesión nuevamente.');
+    Navigator.pushReplacementNamed(context, '/login');
+    return;
+  }
 
+  // Store original state for rollback
+  final originalLikedState = _isLikedNotifier.value;
+  final originalLikesCount = _likesCountNotifier.value;
+  
+  try {
+    // Optimistic UI update
     _isLikedNotifier.value = !_isLikedNotifier.value;
+    _isFavoritedNotifier.value = _isLikedNotifier.value; 
     _likesCountNotifier.value += _isLikedNotifier.value ? 1 : -1;
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(_isLikedNotifier.value ? 'Te gusta' : 'Ya no te gusta'),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+    // Make API call (you'll need to implement this in your repository)
+    final success =  await _repository!.toggleLike(widget.emprendimiento.id, _authToken!);
+    
+    if (!success) {
+      // Revert on failure
+      _isLikedNotifier.value = originalLikedState;
+      _isFavoritedNotifier.value = originalLikedState; 
+      _likesCountNotifier.value = originalLikesCount;
+      _showErrorSnackbar('Error al actualizar like');
+    } else {
+      // Show success feedback
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  _isLikedNotifier.value ? Icons.favorite : Icons.favorite_border,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Text(_isLikedNotifier.value ? 'Te gusta' : 'Ya no te gusta'),
+              ],
+            ),
+            backgroundColor: _isLikedNotifier.value ? Colors.red : Colors.grey[700],
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
+  } catch (e) {
+    // Revert on exception
+    _isLikedNotifier.value = originalLikedState;
+    _isFavoritedNotifier.value = originalLikedState; 
+    _likesCountNotifier.value = originalLikesCount;
+    
+    debugPrint('Toggle like error: $e');
+    
+    // Handle specific error cases
+    final errorMessage = e.toString().toLowerCase();
+    
+    if (errorMessage.contains('token') || 
+        errorMessage.contains('401') || 
+        errorMessage.contains('unauthorized') ||
+        errorMessage.contains('autenticación')) {
+      
+      _showErrorSnackbar('Sesión expirada. Por favor inicia sesión nuevamente.');
+      
+      // Clear the invalid token
+      _authToken = null;
+      
+      // Auto logout and redirect
+      await widget.authRepository.logout();
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    } else {
+      _showErrorSnackbar('Error al actualizar like: ${e.toString()}');
+    }
+  }
 }
 
 
@@ -2412,104 +3022,70 @@ void _initializeVideoPlayer() {
 }
 
   void _showRatingDialog() {
-    if (_isGuestUser) {
-      _showLoginPrompt('escribir una reseña');
-      return;
-    }
-    
-    if (_commentRepository == null) {
-      _showErrorSnackbar('Sistema de comentarios no disponible');
-      return;
-    }
-
-    double tempRating = 0.0;
-    final commentController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Escribir reseña'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                /*Text(
-                  'Tu calificación:',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (index) {
-                    return GestureDetector(
-                      onTap: () {
-                        setDialogState(() {
-                          tempRating = index + 1.0;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Icon(
-                          index < tempRating ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 36,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                if (tempRating > 0) ...[
-                  const SizedBox(height: 8),
-                  Center(
-                    child: Text(
-                      '${tempRating.toInt()} estrella${tempRating > 1 ? 's' : ''}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],*/
-                const SizedBox(height: 16),
-                TextField(
-                  controller: commentController,
-                  decoration: const InputDecoration(
-                    hintText: 'Escribe tu comentario...',
-                    border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
-                  ),
-                  maxLines: 4,
-                  maxLength: 500,
-                  textCapitalization: TextCapitalization.sentences,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar'),
-            ),
-            ElevatedButton(
-              onPressed:
-                  tempRating > 0 && commentController.text.trim().isNotEmpty
-                  ? () async {
-                      Navigator.pop(context); // Close dialog first
-                      await _submitRating(
-                        tempRating,
-                        commentController.text.trim(),
-                      );
-                    }
-                  : null,
-              child: const Text('Enviar'),
-            ),
-          ],
-        ),
-      ),
-    );
+  if (_isGuestUser) {
+    _showLoginPrompt('escribir una reseña');
+    return;
   }
+
+  if (_commentRepository == null) {
+    _showErrorSnackbar('Sistema de comentarios no disponible');
+    return;
+  }
+
+  // Define the controller inside the method
+  final commentController = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        title: const Text('Escribir reseña'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 16),
+              TextField(
+                controller: commentController,
+                // STEP 1: Add onChanged to trigger the rebuild
+                onChanged: (value) {
+                  setDialogState(() {
+                    // This empty call forces the StatefulBuilder to 
+                    // re-evaluate the button's 'onPressed' condition.
+                  });
+                },
+                decoration: const InputDecoration(
+                  hintText: 'Escribe tu comentario...',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 4,
+                maxLength: 500,
+                textCapitalization: TextCapitalization.sentences,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            // STEP 2: This will now update in real-time
+            onPressed: commentController.text.trim().isNotEmpty
+                ? () async {
+                    String comment = commentController.text.trim();
+                    Navigator.pop(context);
+                    await _submitRating(comment);
+                  }
+                : null,
+            child: const Text('Enviar'),
+          ),
+        ],
+      ),
+    ),
+  ).then((_) => commentController.dispose()); // Clean up memory
+}
 
   void _showReplyDialog(Comment comment) {
     if (_isGuestUser) {
@@ -2574,7 +3150,7 @@ void _initializeVideoPlayer() {
     );
   }
 
-  Future<void> _submitRating(double rating, String comment) async {
+  Future<void> _submitRating(String comment) async {
     if (_commentRepository == null) {
       _showErrorSnackbar('Error: Sistema de comentarios no disponible');
       return;

@@ -124,7 +124,7 @@ class EmprendimientosRepository {
       rethrow;
     }
   }
-
+  
   Future<bool> rateEmprendimiento(int id, int rating, String token) async {
     try {
       return await remoteDataSource.rateEmprendimiento(id, rating, token);
