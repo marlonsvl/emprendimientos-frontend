@@ -1680,53 +1680,47 @@ String _getStarsFromPriority(int priority) {
         const SizedBox(height: 16),
 
         // Map controls
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _changeMapStyle('osm'),
-                icon: Icon(
-                  Icons.map,
-                  size: 16,
-                  color: _currentMapStyle == 'osm'
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
-                ),
-                label: Text('Estándar'),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: _currentMapStyle == 'osm'
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : null,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _changeMapStyle('topo'),
-                icon: Icon(
-                  Icons.terrain,
-                  size: 16,
-                  color: _currentMapStyle == 'topo'
-                      ? Theme.of(context).colorScheme.primary
-                      : null,
-                ),
-                label: Text('Topográfico'),
-                style: OutlinedButton.styleFrom(
-                  backgroundColor: _currentMapStyle == 'topo'
-                      ? Theme.of(context).colorScheme.primaryContainer
-                      : null,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: _centerMapOnLocation,
-              icon: const Icon(Icons.my_location),
-              tooltip: 'Centrar en ubicación',
-            ),
-          ],
-        ),
+        // Map controls
+Row(
+  children: [
+    Expanded(
+      child: _buildMapStyleButton(
+        label: 'Estándar',
+        icon: Icons.map,
+        style: 'osm',
+        isSelected: _currentMapStyle == 'osm',
+      ),
+    ),
+    const SizedBox(width: 8),
+    Expanded(
+      child: _buildMapStyleButton(
+        label: 'Topográfico',
+        icon: Icons.terrain,
+        style: 'topo',
+        isSelected: _currentMapStyle == 'topo',
+      ),
+    ),
+    const SizedBox(width: 8),
+    Container(
+      decoration: BoxDecoration(
+        gradient: BrandColors.gradient,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: BrandColors.goldenYellow.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        onPressed: _centerMapOnLocation,
+        icon: const Icon(Icons.my_location, color: Colors.white),
+        tooltip: 'Centrar en ubicación',
+      ),
+    ),
+  ],
+),
 
         const SizedBox(height: 24),
 
@@ -1800,6 +1794,55 @@ String _getStarsFromPriority(int priority) {
       ],
     );
   }
+
+  Widget _buildMapStyleButton({
+  required String label,
+  required IconData icon,
+  required String style,
+  required bool isSelected,
+}) {
+  return Container(
+    decoration: BoxDecoration(
+      gradient: isSelected ? BrandColors.gradient : null,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: isSelected ? [
+        BoxShadow(
+          color: BrandColors.goldenYellow.withOpacity(0.3),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
+        ),
+      ] : null,
+    ),
+    child: OutlinedButton.icon(
+      onPressed: () => _changeMapStyle(style),
+      icon: Icon(
+        icon,
+        size: 18,
+        color: isSelected ? Colors.white : Colors.grey.shade700,
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? Colors.white : Colors.grey.shade700,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+          fontSize: 13,
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        backgroundColor: isSelected ? Colors.transparent : Colors.white,
+        foregroundColor: isSelected ? Colors.white : Colors.grey.shade700,
+        side: BorderSide(
+          color: isSelected ? Colors.transparent : Colors.grey.shade300,
+          width: 1.5,
+        ),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+    ),
+  );
+}
 
   // Add helper method to get map tile URL based on style:
   String _getMapTileUrl() {
