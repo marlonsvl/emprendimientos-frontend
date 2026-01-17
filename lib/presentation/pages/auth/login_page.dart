@@ -203,8 +203,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 SizedBox(height: config.verticalSpacing * 2),
                 
                 CircularProgressIndicator(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  strokeWidth: 5,
+                  color: Colors.black54,
+                  strokeWidth: 10,
                 ),
                 
                 SizedBox(height: config.verticalSpacing),
