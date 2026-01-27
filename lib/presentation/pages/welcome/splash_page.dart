@@ -670,7 +670,7 @@ class _SplashPageState extends State<SplashPage>
             ),
             const SizedBox(height: 32),
             const Text(
-              'GastroStart',
+              'EmprendeGastroLoja',
               style: TextStyle(
                 fontSize: 48,
                 fontWeight: FontWeight.w900,

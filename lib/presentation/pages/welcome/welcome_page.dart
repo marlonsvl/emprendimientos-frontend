@@ -278,9 +278,9 @@ class WelcomePage extends StatelessWidget {
         // Title
         // Title (splash page style)
         Text(
-          'GastroStart',
+          'EmprendeGastroLoja',
           style: TextStyle(
-            fontSize: config.titleSize,
+            fontSize: _getAdaptiveFontSize(46, config),
             fontWeight: FontWeight.w900,
             color: Colors.white,
             letterSpacing: 1.5,
@@ -306,7 +306,7 @@ class WelcomePage extends StatelessWidget {
           
           // Subtitle
           Text(
-            'Descubre increíbles startups gastronómicos\ne innovaciones culinarias',
+            'Descubre increíbles emprendimientos gastronómicos\ne innovaciones culinarias',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
@@ -489,6 +489,16 @@ class WelcomePage extends StatelessWidget {
     ],
   );
 }
+
+double _getAdaptiveFontSize(double baseSize, ResponsiveConfig config) {
+    if (config.logoSize <= 120) {
+      return baseSize * 0.9;
+    } else if (config.logoSize <= 140) {
+      return baseSize;
+    } else {
+      return baseSize * 1.1;
+    }
+  }
 }
 
 // Helper classes for responsive configuration
