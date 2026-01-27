@@ -27,10 +27,10 @@ class _VideoPlayerSectionState extends State<VideoPlayerSection> {
 
   void _initializePlayer() {
     _player = CachedVideoPlayerPlus.networkUrl(
-      //Uri.parse(widget.videoUrl.replaceFirst('/upload/', '/upload/f_mp4/')),
-      Uri.parse(
-        "https://res.cloudinary.com/djl0e1p6e/video/upload/v1762564764/samples/dance-2.mp4".replaceFirst('/upload/', '/upload/f_mp4/'),
-      ),
+      Uri.parse(widget.videoUrl.replaceFirst('/upload/', '/upload/f_mp4/')),
+      //Uri.parse(
+      //  "https://res.cloudinary.com/djl0e1p6e/video/upload/v1762564764/samples/dance-2.mp4".replaceFirst('/upload/', '/upload/f_mp4/'),
+      //),
       invalidateCacheIfOlderThan: const Duration(hours: 1),
     );
 

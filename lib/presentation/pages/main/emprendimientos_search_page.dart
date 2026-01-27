@@ -426,7 +426,7 @@ class _EmprendimientosSearchPageState extends State<EmprendimientosSearchPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'GastroStart',
+                    'EmprendeGastroLoja',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,

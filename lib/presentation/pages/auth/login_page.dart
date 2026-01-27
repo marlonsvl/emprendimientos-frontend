@@ -204,7 +204,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 
                 CircularProgressIndicator(
                   color: Colors.black54,
-                  strokeWidth: 10,
+                  strokeWidth: 6,
                 ),
                 
                 SizedBox(height: config.verticalSpacing),
@@ -349,7 +349,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Increíbles startups\ngastronómicas',
+                              'Increíbles emprendimientos\ngastronómicos',
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.w600,
@@ -468,7 +468,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             SizedBox(height: config.verticalSpacing * 0.75),
             
             Text(
-              'Descubre las mejores startups gastronómicas\ny conecta con innovación culinaria',
+              'Descubre los mejores emprendimientos gastronómicas\ny conecta con innovación culinaria',
               style: TextStyle(
                 fontSize: _getAdaptiveFontSize(15, config),
                 fontWeight: FontWeight.w600,
