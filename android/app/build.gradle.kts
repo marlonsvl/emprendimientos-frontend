@@ -63,8 +63,8 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion //flutter.minSdkVersion
         targetSdk = 35
-        versionCode = 6 //flutter.versionCode
-        versionName = "1.0.5" //flutter.versionName
+        versionCode = 9 //flutter.versionCode
+        versionName = "1.0.8" //flutter.versionName
     }
 
     

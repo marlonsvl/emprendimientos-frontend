@@ -1,4 +1,4 @@
-import 'dart:math';
+/*import 'dart:math';
 
 import 'package:emprendegastroloja/core/constants/api_constants.dart';
 import 'package:emprendegastroloja/data/datasources/local/auth_local_datasource.dart';
@@ -1223,7 +1223,7 @@ void _initializeVideoPlayer() {
           const SizedBox(height: 12),
 
           // Like Button (Full Width)
-          SizedBox(
+          /*SizedBox(
             width: double.infinity,
             child: ValueListenableBuilder<bool>(
               valueListenable: _isLikedNotifier,
@@ -1254,7 +1254,7 @@ void _initializeVideoPlayer() {
                 );
               },
             ),
-          ),
+          ),*/
         ],
       ),
     ),
@@ -2727,7 +2727,7 @@ Row(
         );
       });
       _showErrorSnackbar('Error al actualizar favoritos');
-    } else {
+    } /*else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -2756,7 +2756,7 @@ Row(
           ),
         );
       }
-    }
+    }*/
   } catch (e) {
     // Revert on exception
     _isFavoritedNotifier.value = originalFavoritedState;
@@ -2788,27 +2788,9 @@ Row(
   }
 }
 
-  /*void _toggleLike() {
-    setState(() {
-      _isLiked = !_isLiked;
-      _likesCount += _isLiked ? 1 : -1;
-    });
+  
 
-    // Optional: Show a subtle feedback
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isLiked
-              ? 'Te gusta este emprendimiento'
-              : 'Ya no te gusta este emprendimiento',
-        ),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }*/
-
-  Future<void> _toggleLike() async {
+  /*Future<void> _toggleLike() async {
   debugPrint('=== Toggle Like Debug ===');
   debugPrint('Is Guest: $_isGuestUser');
   debugPrint('Token exists: ${_authToken != null}');
@@ -2903,7 +2885,7 @@ Row(
       _showErrorSnackbar('Error al actualizar like: ${e.toString()}');
     }
   }
-}
+}*/
 
 
 
@@ -3666,6 +3648,2042 @@ class _FullscreenCarouselPageState extends State<_FullscreenCarouselPage> {
                           ? Colors.white
                           : Colors.white.withValues(alpha: 0.4),
                     ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}*/
+
+import 'dart:math';
+
+import 'package:emprendegastroloja/core/constants/api_constants.dart';
+import 'package:emprendegastroloja/data/datasources/local/auth_local_datasource.dart';
+import 'package:emprendegastroloja/data/datasources/local/emprendimientos_local_datasource.dart';
+import 'package:emprendegastroloja/data/datasources/remote/emprendimientos_remote_datasource.dart';
+import 'package:emprendegastroloja/domain/repositories/auth_repository.dart';
+import 'package:emprendegastroloja/domain/repositories/comment_repository.dart';
+import 'package:emprendegastroloja/domain/repositories/emprendimientos_repository.dart';
+import 'package:emprendegastroloja/domain/usecases/auth/get_current_user_usecase.dart';
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_bloc.dart';
+import 'package:emprendegastroloja/presentation/bloc/auth/auth_state.dart';
+import 'package:emprendegastroloja/presentation/pages/main/widgets/video_player_section.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../../data/models/emprendimiento_model.dart';
+import '../../../data/models/comment_model.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:cached_video_player_plus/cached_video_player_plus.dart';
+import 'package:share_plus/share_plus.dart';
+
+class BrandColors {
+  static const lightYellow = Color(0xFFFFF59D);
+  static const brightYellow = Color(0xFFFDD835);
+  static const goldenYellow = Color(0xFFFDB913);
+  static const deepGold = Color(0xFFF39C12);
+
+  static const gradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [lightYellow, brightYellow, goldenYellow, deepGold],
+    stops: [0.0, 0.3, 0.6, 1.0],
+  );
+}
+
+class EmprendimientoDetailPage extends StatefulWidget {
+  final Emprendimiento emprendimiento;
+  final AuthRepository authRepository;
+
+  const EmprendimientoDetailPage({
+    Key? key,
+    required this.emprendimiento,
+    required this.authRepository,
+  }) : super(key: key);
+
+  @override
+  State<EmprendimientoDetailPage> createState() =>
+      _EmprendimientoDetailPageState();
+}
+
+class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
+    with TickerProviderStateMixin {
+  late TabController _tabController;
+  late CarouselSliderController _carouselController;
+  CachedVideoPlayerPlus? _player;
+
+  int _currentImageIndex = 0;
+
+  MapController? _mapController;
+  String _currentMapStyle = 'osm';
+
+  late AnimationController _fabAnimationController;
+  late Animation<double> _fabAnimation;
+
+  late final List<String> _allImages;
+  String? _authToken;
+
+  // ─── FIX: track repository readiness ───────────────────────────────────────
+  bool _repositoryReady = false;
+
+  CommentRepository? _commentRepository;
+  late final GetCurrentUserUseCase _getCurrentUserUseCase;
+
+  final TextEditingController _commentController = TextEditingController();
+
+  bool get _isGuestUser {
+    final authState = context.read<AuthBloc>().state;
+    return authState is AuthGuest;
+  }
+
+  List<Comment> _comments = [];
+  bool _isLoadingComments = false;
+  bool _isLiked = false;
+  int _likesCount = 0;
+  bool _isFavorited = false;
+  double _userRating = 0.0;
+  late Emprendimiento _currentEmprendimiento;
+  bool _showFullDescription = false;
+  String? _errorMessage;
+  int? _currentUserId;
+  EmprendimientosRepository? _repository;
+
+  // ─── FIX: separate notifiers for likes and favorites ────────────────────────
+  final ValueNotifier<bool> _isLikedNotifier = ValueNotifier(false);
+  final ValueNotifier<int> _likesCountNotifier = ValueNotifier(0);
+  final ValueNotifier<bool> _isFavoritedNotifier = ValueNotifier(false);
+
+  // ─── FIX: initialize repository and await it properly ───────────────────────
+  Future<void> _initializeRepository() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tokenResult = await widget.authRepository.getAuthToken();
+
+      _authToken = tokenResult.fold(
+        (failure) {
+          debugPrint('Auth token error: ${failure.toString()}');
+          return null;
+        },
+        (token) => token,
+      );
+
+      _repository = EmprendimientosRepository(
+        remoteDataSource: EmprendimientosRemoteDataSource(
+          baseUrl: ApiConstants.baseUrl,
+        ),
+        localDataSource: EmprendimientosLocalDataSource(
+          sharedPreferences: prefs,
+        ),
+      );
+
+      // ─── FIX: mark repository as ready only after full init ─────────────────
+      if (mounted) {
+        setState(() {
+          _repositoryReady = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Repository initialization error: $e');
+      rethrow;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _currentEmprendimiento = widget.emprendimiento;
+    _allImages = widget.emprendimiento.galleryUrls
+        .map((url) => url.replaceAll(RegExp(r'[{}]'), '').trim())
+        .where((url) => url.isNotEmpty)
+        .toList();
+    _setupControllers();
+    _initializeVideoPlayer();
+    _initializeData();
+
+    _carouselController = CarouselSliderController();
+    _mapController = MapController();
+
+    // ─── FIX: run repository init then auth init sequentially ───────────────
+    _initializeRepository().then((_) => _initializeAuth());
+
+    _getCurrentUserUseCase = GetCurrentUserUseCase(widget.authRepository);
+    _getCurrentUserUseCase.repository.getCurrentUser().then((result) {
+      result.fold((failure) {}, (user) {
+        if (mounted) {
+          setState(() {
+            _currentUserId = user?.id;
+          });
+        }
+      });
+    });
+
+    _initializeCommentRepository().then((repo) {
+      _commentRepository = repo;
+      _loadComments();
+    });
+
+    // ─── FIX: initialise notifiers from widget, not from each other ──────────
+    _isLikedNotifier.value = widget.emprendimiento.isLikedByUser;
+    _likesCountNotifier.value = widget.emprendimiento.likesCount;
+    _isFavoritedNotifier.value = widget.emprendimiento.isFavoritedByUser;
+  }
+
+  Future<void> _initializeAuth() async {
+    if (_isGuestUser) {
+      _authToken = null;
+      return;
+    }
+
+    final tokenResult = await widget.authRepository.getAuthToken();
+    if (mounted) {
+      setState(() {
+        _authToken = tokenResult.fold(
+          (failure) {
+            debugPrint('Auth token error: ${failure.toString()}');
+            return null;
+          },
+          (token) {
+            debugPrint('Token loaded successfully');
+            return token;
+          },
+        );
+      });
+    }
+  }
+
+  Future<bool> _ensureValidToken() async {
+    if (_isGuestUser) return false;
+
+    if (_authToken == null || _authToken!.isEmpty) {
+      final tokenResult = await widget.authRepository.getAuthToken();
+      if (mounted) {
+        setState(() {
+          _authToken = tokenResult.fold(
+            (failure) {
+              debugPrint('Token refresh failed: ${failure.toString()}');
+              return null;
+            },
+            (token) {
+              debugPrint('Token refreshed successfully');
+              return token;
+            },
+          );
+        });
+      }
+    }
+
+    return _authToken != null && _authToken!.isNotEmpty;
+  }
+
+  void _initializeVideoPlayer() {
+    if (!widget.emprendimiento.hasVideo) return;
+
+    _player = CachedVideoPlayerPlus.networkUrl(
+      Uri.parse(
+        "https://res.cloudinary.com/djl0e1p6e/video/upload/v1762564764/samples/dance-2.mp4"
+            .replaceFirst('/upload/', '/upload/f_mp4/'),
+      ),
+      invalidateCacheIfOlderThan: const Duration(hours: 1),
+    );
+
+    _player?.initialize().then((_) {
+      if (!mounted) return;
+      
+      // 1. Play first — listener not registered yet, safe
+      _player?.controller.play();
+      
+      // 2. Register listener — synchronous notification from play() already passed
+      _player?.controller.addListener(_controllerListener);
+      
+      // 3. Defer setState to after the frame
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+    }).catchError((error) {
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+            _errorMessage = 'Error al cargar video: ${error.toString()}';
+          });
+          }
+        });
+      }
+    });
+  }
+
+  void _controllerListener() {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+  }
+
+  Future<CommentRepository> _initializeCommentRepository() async {
+    final prefs = await SharedPreferences.getInstance();
+    final authLocalDataSource = AuthLocalDataSourceImpl(
+      sharedPreferences: prefs,
+    );
+
+    return CommentRepository(
+      baseUrl: ApiConstants.baseUrl,
+      localDataSource: authLocalDataSource,
+    );
+  }
+
+  Future<void> _loadComments() async {
+    if (_commentRepository == null) return;
+
+    setState(() {
+      _isLoadingComments = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final comments = await _commentRepository!.getComments(
+        widget.emprendimiento.id,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _comments = comments;
+        _isLoadingComments = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      final errorMsg = 'Error al cargar comentarios: ${e.toString()}';
+      setState(() {
+        _errorMessage = errorMsg;
+        _isLoadingComments = false;
+      });
+      _showErrorSnackbar(errorMsg);
+    }
+  }
+
+  void _setupControllers() {
+    _tabController = TabController(length: 4, vsync: this);
+
+    _fabAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+
+    _fabAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fabAnimationController, curve: Curves.easeOut),
+    );
+
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _fabAnimationController.forward();
+      }
+    });
+
+    _tabController.addListener(() {
+      if (mounted && !_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _initializeData() {
+    _isLiked = widget.emprendimiento.isLikedByUser;
+    _likesCount = widget.emprendimiento.likesCount;
+    _isFavorited = widget.emprendimiento.isFavoritedByUser;
+  }
+
+  @override
+  void dispose() {
+    _player?.controller.removeListener(_controllerListener);
+    _player?.controller.pause();
+    _player?.controller.dispose();
+
+    _mapController?.dispose();
+    _tabController.dispose();
+    _fabAnimationController.dispose();
+    _commentController.dispose();
+
+    _isLikedNotifier.dispose();
+    _likesCountNotifier.dispose();
+    _isFavoritedNotifier.dispose();
+    super.dispose();
+  }
+
+  // ─── FIX: WillPopScope ensures correct data is always returned on back ──────
+  Future<bool> _onWillPop() async {
+    Navigator.of(context).pop(_buildReturnData());
+    return false;
+  }
+
+  Map<String, dynamic> _buildReturnData() {
+    return {
+      'emprendimiento_id': widget.emprendimiento.id,
+      'is_favorited': _isFavoritedNotifier.value,
+      'is_liked': _isLikedNotifier.value,
+      'likes_count': _likesCountNotifier.value,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WillPopScope(
+      onWillPop: _onWillPop,
+      child: Scaffold(
+        backgroundColor: Colors.grey[50],
+        body: NotificationListener<ScrollNotification>(
+          child: DefaultTabController(
+            length: 4,
+            child: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) {
+                return [
+                  _buildSliverAppBar(),
+                  _buildInfoHeader(),
+                  SliverOverlapAbsorber(
+                    handle:
+                        NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+                    sliver: _buildTabBar(),
+                  ),
+                ];
+              },
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildDetailsTabSafe(),
+                  _buildMenuTab(),
+                  _buildLocationTab(),
+                  _buildReviewsTabSafe(),
+                ],
+              ),
+            ),
+          ),
+        ),
+        floatingActionButton: _buildFloatingActionButtons(),
+      ),
+    );
+  }
+
+  Widget _buildDetailsTabSafe() {
+    return Builder(
+      builder: (context) {
+        return CustomScrollView(
+          key: const PageStorageKey<String>('details_tab'),
+          primary: false,
+          slivers: [
+            SliverOverlapInjector(
+              handle:
+                  NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+            ),
+            SliverPadding(
+              padding: const EdgeInsets.all(20),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  if (widget.emprendimiento.hasVideo) _buildVideoSection(),
+                  _buildSection(
+                    'Información de Contacto',
+                    Icons.contact_phone,
+                    [
+                      _buildDetailRow('Teléfono', widget.emprendimiento.telefono),
+                      _buildDetailRow('Email', widget.emprendimiento.email),
+                      _buildDetailRow('Horario de atención', widget.emprendimiento.horario),
+                    ],
+                  ),
+                  _buildSection('Información General', Icons.info, [
+                    _buildDetailRow('Tipo de turismo', widget.emprendimiento.tipoTurismo),
+                    _buildDetailRow('Tipo de establecimiento', widget.emprendimiento.tipo),
+                    _buildDetailRow('Años de experiencia', '${widget.emprendimiento.experiencia} años'),
+                    _buildDetailRow('Estado del local', widget.emprendimiento.estadoLocal),
+                    if (widget.emprendimiento.mesas > 0)
+                      _buildDetailRow('Número de mesas', '${widget.emprendimiento.mesas}'),
+                    _buildDetailRow('Capacidad total', '${widget.emprendimiento.plazas} personas'),
+                    _buildDetailRow('Baños disponibles', widget.emprendimiento.banio),
+                    _buildDetailRow('Tiempo trabajando', '${widget.emprendimiento.tiempoTrabajando} años'),
+                  ]),
+                ]),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildReviewsTabSafe() {
+    return Builder(
+      builder: (context) {
+        return CustomScrollView(
+          key: const PageStorageKey<String>('reviews_tab'),
+          primary: false,
+          slivers: [
+            SliverOverlapInjector(
+              handle:
+                  NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+            ),
+            SliverToBoxAdapter(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _showRatingDialog,
+                        icon: const Icon(Icons.rate_review, size: 16),
+                        label: const Text('Escribir reseña'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (_isLoadingComments)
+              const SliverFillRemaining(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_comments.isEmpty)
+              SliverFillRemaining(
+                child: SingleChildScrollView(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.comment, size: 64, color: Theme.of(context).colorScheme.outline),
+                          const SizedBox(height: 16),
+                          Text('No hay comentarios aún', style: Theme.of(context).textTheme.titleLarge, textAlign: TextAlign.center),
+                          const SizedBox(height: 8),
+                          Text('Sé el primero en dejar una reseña',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                              textAlign: TextAlign.center),
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _showRatingDialog,
+                            icon: const Icon(Icons.rate_review),
+                            label: const Text('Escribir primera reseña'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.all(16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildCommentCard(_comments[index]),
+                    childCount: _comments.length,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildSliverAppBar() {
+    return SliverAppBar(
+      expandedHeight: 300,
+      floating: false,
+      pinned: true,
+      elevation: 0,
+      backgroundColor: Colors.transparent,
+      // ─── FIX: back button also uses _buildReturnData() ──────────────────────
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        onPressed: () {
+          Navigator.of(context).pop(_buildReturnData());
+        },
+      ),
+      flexibleSpace: FlexibleSpaceBar(
+        background: Stack(
+          fit: StackFit.expand,
+          children: [
+            CarouselSlider(
+              carouselController: _carouselController,
+              options: CarouselOptions(
+                height: 300,
+                viewportFraction: 1.0,
+                enableInfiniteScroll: false,
+                autoPlay: false,
+                disableCenter: true,
+                enlargeCenterPage: false,
+                clipBehavior: Clip.none,
+                onPageChanged: (index, reason) {
+                  setState(() {
+                    _currentImageIndex = index;
+                  });
+                },
+              ),
+              items: _allImages.map((imageUrl) {
+                return Builder(
+                  builder: (BuildContext context) {
+                    return Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          color: Colors.grey[300],
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.restaurant, size: 64, color: Colors.grey[600]),
+                              const SizedBox(height: 8),
+                              Text('Imagen no disponible', style: TextStyle(color: Colors.grey[600])),
+                            ],
+                          ),
+                        );
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          color: Colors.grey[300],
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                      loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withValues(alpha: 0.7)],
+                ),
+              ),
+            ),
+            if (_allImages.isNotEmpty)
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.photo_library, color: Colors.white, size: 16),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_currentImageIndex + 1}/${_allImages.length}',
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _showFullscreenCarousel(_allImages),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.fullscreen, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_allImages.isNotEmpty) ...[
+              Positioned(
+                left: 16, top: 0, bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    icon: Container(
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle),
+                      padding: const EdgeInsets.all(8),
+                      child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                    ),
+                    onPressed: () => _carouselController.previousPage(),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 16, top: 0, bottom: 0,
+                child: Center(
+                  child: IconButton(
+                    icon: Container(
+                      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.5), shape: BoxShape.circle),
+                      padding: const EdgeInsets.all(8),
+                      child: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
+                    ),
+                    onPressed: () => _carouselController.nextPage(),
+                  ),
+                ),
+              ),
+            ],
+            if (_allImages.isNotEmpty)
+              Positioned(
+                bottom: 50, left: 0, right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: _allImages.asMap().entries.map((entry) {
+                    return GestureDetector(
+                      onTap: () => _carouselController.animateToPage(entry.key),
+                      child: Container(
+                        width: 8, height: 8,
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _currentImageIndex == entry.key
+                              ? Colors.white
+                              : Colors.white.withValues(alpha: 0.4),
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2))],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        ValueListenableBuilder<bool>(
+          valueListenable: _isFavoritedNotifier,
+          builder: (context, isFavorited, child) {
+            return IconButton(
+              icon: Icon(
+                isFavorited ? Icons.favorite : Icons.favorite_border,
+                color: isFavorited ? Colors.red : Colors.white,
+              ),
+              onPressed: _toggleFavorite,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  void _showFullscreenCarousel(List<String> images) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _FullscreenCarouselPage(
+          images: images,
+          initialIndex: _currentImageIndex,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoHeader() {
+    return SliverToBoxAdapter(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.emprendimiento.nombre,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold, fontSize: 24, letterSpacing: 0.3),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person, size: 16, color: Colors.grey),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          widget.emprendimiento.propietario,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[700], fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    gradient: BrandColors.gradient,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: BrandColors.goldenYellow.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_getStarsFromPriority(widget.emprendimiento.categoryPriority), style: const TextStyle(fontSize: 12)),
+                      const SizedBox(width: 6),
+                      Text(
+                        widget.emprendimiento.categoryDisplayName,
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (widget.emprendimiento.tipo?.isNotEmpty ?? false)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.store, size: 16, color: Colors.blue.shade700),
+                    const SizedBox(width: 8),
+                    Text(widget.emprendimiento.tipo!, style: TextStyle(fontSize: 13, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            if (widget.emprendimiento.oferta.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: [Colors.orange.shade50, Colors.orange.shade100], begin: Alignment.topLeft, end: Alignment.bottomRight),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.local_offer, color: Colors.orange.shade700, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Oferta Especial', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange.shade700)),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.emprendimiento.oferta,
+                            style: TextStyle(fontSize: 14, color: Colors.orange.shade900, height: 1.4),
+                            maxLines: _showFullDescription ? null : 3,
+                            overflow: _showFullDescription ? null : TextOverflow.ellipsis,
+                          ),
+                          if (widget.emprendimiento.oferta.length > 100)
+                            TextButton(
+                              onPressed: () => setState(() => _showFullDescription = !_showFullDescription),
+                              style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 30)),
+                              child: Text(_showFullDescription ? 'Ver menos' : 'Ver más', style: TextStyle(color: Colors.orange.shade700)),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStatItem(icon: Icons.attach_money, label: 'Precio', value: '\$${widget.emprendimiento.precioPromedio.toStringAsFixed(2)}', color: Colors.green),
+                  Container(width: 1, height: 40, color: Colors.grey.shade300),
+                  // ─── FIX: likesCount notifier only, not coupled to isFavorited ──────
+                  ValueListenableBuilder<int>(
+                    valueListenable: _likesCountNotifier,
+                    builder: (context, likesCount, child) {
+                      return _buildStatItem(icon: Icons.favorite, label: 'Me gusta', value: '$likesCount', color: Colors.red);
+                    },
+                  ),
+                  Container(width: 1, height: 40, color: Colors.grey.shade300),
+                  _buildStatItem(icon: Icons.comment, label: 'Comentarios', value: '${_comments.length}', color: Colors.blue),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _buildEnhancedInfoCard(Icons.location_on, 'Ubicación', '${widget.emprendimiento.parroquia}', '${widget.emprendimiento.sector}')),
+                const SizedBox(width: 12),
+                Expanded(child: _buildEnhancedInfoCard(Icons.access_time, 'Horario', widget.emprendimiento.horario, null)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _buildEnhancedInfoCard(Icons.table_restaurant, 'Capacidad', '${widget.emprendimiento.plazas} personas', widget.emprendimiento.mesas > 0 ? '${widget.emprendimiento.mesas} mesas' : null)),
+                const SizedBox(width: 12),
+                Expanded(child: _buildEnhancedInfoCard(Icons.timer, 'Experiencia', '${widget.emprendimiento.experiencia} años', widget.emprendimiento.tiempoTrabajando > 0 ? '${widget.emprendimiento.tiempoTrabajando} años operando' : null)),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _makePhoneCall,
+                    icon: const Icon(Icons.phone, size: 20),
+                    label: const Text('Llamar'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
+                      backgroundColor: BrandColors.goldenYellow,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _sendWhatsApp,
+                    icon: const Icon(Icons.message, size: 20),
+                    label: const Text('WhatsApp'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      side: const BorderSide(color: BrandColors.goldenYellow, width: 2),
+                      foregroundColor: BrandColors.goldenYellow,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatItem({required IconData icon, required String label, required String value, required Color color}) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(height: 6),
+        Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+      ],
+    );
+  }
+
+  Widget _buildEnhancedInfoCard(IconData icon, String label, String value, String? subtitle) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(color: BrandColors.lightYellow.withOpacity(0.3), borderRadius: BorderRadius.circular(8)),
+                child: Icon(icon, size: 18, color: BrandColors.deepGold),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey[600], letterSpacing: 0.3), overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, height: 1.3), maxLines: 2, overflow: TextOverflow.ellipsis),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey[600]), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _getStarsFromPriority(int priority) {
+    switch (priority) {
+      case 1: return '⭐';
+      case 2: return '⭐⭐';
+      case 3: return '⭐⭐⭐';
+      default: return '';
+    }
+  }
+
+  Widget _buildInfoCard(IconData icon, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 4),
+              Text(label, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(value, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500), maxLines: 2, overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar() {
+    return SliverToBoxAdapter(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))],
+        ),
+        child: TabBar(
+          controller: _tabController,
+          labelColor: BrandColors.goldenYellow,
+          unselectedLabelColor: Colors.grey[600],
+          indicatorColor: BrandColors.goldenYellow,
+          indicatorWeight: 3,
+          labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+          tabs: const [
+            Tab(text: 'Detalles', icon: Icon(Icons.info_outline, size: 20)),
+            Tab(text: 'Menú', icon: Icon(Icons.restaurant_menu, size: 20)),
+            Tab(text: 'Ubicación', icon: Icon(Icons.map_outlined, size: 20)),
+            Tab(text: 'Reseñas', icon: Icon(Icons.reviews_outlined, size: 20)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVideoSection() {
+    return VideoPlayerSection(videoUrl: widget.emprendimiento.videoUrl ?? '');
+  }
+
+  Widget _buildMenuTab() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        if (widget.emprendimiento.hasMenu) ...[
+          Text('Menú', style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+            child: Text(widget.emprendimiento.menu!, style: Theme.of(context).textTheme.bodyLarge),
+          ),
+        ] else ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.restaurant_menu, size: 64, color: Theme.of(context).colorScheme.outline),
+                const SizedBox(height: 16),
+                Text('Menú no disponible', style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: 8),
+                Text('Contacta directamente para conocer el menú',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: ElevatedButton.icon(onPressed: _makePhoneCall, icon: const Icon(Icons.phone), label: const Text('Llamar'))),
+                    const SizedBox(width: 12),
+                    Expanded(child: OutlinedButton.icon(onPressed: _sendWhatsApp, icon: const Icon(Icons.message), label: const Text('WhatsApp'))),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 24),
+        _buildSection('Tipo de Servicio', Icons.room_service, [_buildDetailText(widget.emprendimiento.tipoServicio)]),
+      ],
+    );
+  }
+
+  Widget _buildLocationTab() {
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Container(
+          height: 300,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: LatLng(widget.emprendimiento.latitude, widget.emprendimiento.longitude),
+              initialZoom: 15.0,
+              minZoom: 5.0,
+              maxZoom: 18.0,
+              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+            ),
+            children: [
+              TileLayer(urlTemplate: _getMapTileUrl(), userAgentPackageName: 'com.example.emprendimientos', maxZoom: 19, maxNativeZoom: 19),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: LatLng(widget.emprendimiento.latitude, widget.emprendimiento.longitude),
+                    width: 40, height: 40,
+                    child: GestureDetector(
+                      onTap: _showMarkerInfo,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.red, shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 4, offset: const Offset(0, 2))],
+                        ),
+                        child: const Icon(Icons.restaurant, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              RichAttributionWidget(
+                attributions: [TextSourceAttribution('OpenStreetMap contributors', onTap: () => _launchUrl('https://www.openstreetmap.org/copyright'))],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: _buildMapStyleButton(label: 'Estándar', icon: Icons.map, style: 'osm', isSelected: _currentMapStyle == 'osm')),
+            const SizedBox(width: 8),
+            Expanded(child: _buildMapStyleButton(label: 'Topográfico', icon: Icons.terrain, style: 'topo', isSelected: _currentMapStyle == 'topo')),
+            const SizedBox(width: 8),
+            Container(
+              decoration: BoxDecoration(gradient: BrandColors.gradient, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: BrandColors.goldenYellow.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))]),
+              child: IconButton(onPressed: _centerMapOnLocation, icon: const Icon(Icons.my_location, color: Colors.white), tooltip: 'Centrar en ubicación'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _buildSection('Dirección Completa', Icons.location_on, [
+          _buildDetailRow('Parroquia', widget.emprendimiento.parroquia),
+          _buildDetailRow('Sector', widget.emprendimiento.sector),
+          _buildDetailRow('Coordenadas', '${widget.emprendimiento.latitude.toStringAsFixed(6)}, ${widget.emprendimiento.longitude.toStringAsFixed(6)}'),
+        ]),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(child: ElevatedButton.icon(onPressed: _openInMaps, icon: const Icon(Icons.directions), label: const Text('Cómo llegar'))),
+            const SizedBox(width: 12),
+            Expanded(child: OutlinedButton.icon(
+              onPressed: _shareLocation, 
+              icon: const Icon(Icons.share), 
+              label: const Text('Compartir ubicación'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              )
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.info, color: Theme.of(context).colorScheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Información de Ubicación', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Este establecimiento se encuentra en ${widget.emprendimiento.parroquia}, sector ${widget.emprendimiento.sector}. '
+                'Puedes usar las coordenadas para navegación GPS o abrir directamente en tu aplicación de mapas favorita.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMapStyleButton({required String label, required IconData icon, required String style, required bool isSelected}) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: isSelected ? BrandColors.gradient : null,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: isSelected ? [BoxShadow(color: BrandColors.goldenYellow.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))] : null,
+      ),
+      child: OutlinedButton.icon(
+        onPressed: () => _changeMapStyle(style),
+        icon: Icon(icon, size: 18, color: isSelected ? Colors.white : Colors.grey.shade700),
+        label: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.grey.shade700, fontWeight: isSelected ? FontWeight.bold : FontWeight.w600, fontSize: 13)),
+        style: OutlinedButton.styleFrom(
+          backgroundColor: isSelected ? Colors.transparent : Colors.white,
+          foregroundColor: isSelected ? Colors.white : Colors.grey.shade700,
+          side: BorderSide(color: isSelected ? Colors.transparent : Colors.grey.shade300, width: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  String _getMapTileUrl() {
+    switch (_currentMapStyle) {
+      case 'topo': return 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
+      case 'osm':
+      default: return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+  }
+
+  void _changeMapStyle(String style) => setState(() => _currentMapStyle = style);
+
+  void _centerMapOnLocation() {
+    _mapController?.move(LatLng(widget.emprendimiento.latitude, widget.emprendimiento.longitude), 15.0);
+  }
+
+  void _showMarkerInfo() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(widget.emprendimiento.nombre),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(widget.emprendimiento.oferta, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.location_on, size: 16, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 4),
+                Expanded(child: Text('${widget.emprendimiento.parroquia}, ${widget.emprendimiento.sector}', style: Theme.of(context).textTheme.bodySmall)),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cerrar')),
+          ElevatedButton.icon(
+            onPressed: () { Navigator.pop(context); _openInMaps(); },
+            icon: const Icon(Icons.directions, size: 16),
+            label: const Text('Ir'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      _showErrorSnackbar('No se puede abrir el enlace');
+    }
+  }
+
+  Widget _buildCommentCard(Comment comment) {
+    final isOwner = _currentUserId != null && comment.userId == _currentUserId;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(backgroundImage: NetworkImage(comment.userAvatar), radius: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(comment.userName, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold)),
+                      Text(comment.timeAgo, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                if (isOwner)
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error, size: 20),
+                    onPressed: () => _confirmDeleteComment(comment),
+                    tooltip: 'Eliminar comentario',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(comment.content, style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => _toggleCommentLike(comment),
+                  icon: Icon(comment.isLikedByUser ? Icons.thumb_up : Icons.thumb_up_outlined, size: 16, color: comment.isLikedByUser ? Theme.of(context).colorScheme.primary : null),
+                  label: Text('${comment.likesCount}'),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+                const SizedBox(width: 16),
+                TextButton.icon(
+                  onPressed: () => _showReplyDialog(comment),
+                  icon: const Icon(Icons.reply, size: 16),
+                  label: const Text('Responder'),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+              ],
+            ),
+            if (comment.hasReplies) ...[
+              const SizedBox(height: 12),
+              Container(
+                margin: const EdgeInsets.only(left: 32),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
+                child: Column(children: comment.replies.map((reply) => _buildReplyCard(reply, comment)).toList()),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReplyCard(CommentReply reply, Comment parentComment) {
+    final isOwner = _currentUserId != null && reply.userId == _currentUserId;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(backgroundImage: NetworkImage(reply.userAvatar), radius: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Text(reply.userName, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 8),
+                          Text(reply.timeAgo, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    if (isOwner)
+                      IconButton(
+                        icon: Icon(Icons.delete_outline, color: Theme.of(context).colorScheme.error, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _confirmDeleteReply(reply, parentComment),
+                        tooltip: 'Eliminar respuesta',
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(reply.content, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteComment(Comment comment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar comentario'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('¿Estás seguro de que deseas eliminar este comentario?'),
+            if (comment.hasReplies) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.errorContainer, borderRadius: BorderRadius.circular(8)),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('También se eliminarán ${comment.replies.length} respuesta(s)', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onErrorContainer))),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () { Navigator.pop(context); _deleteComment(comment); },
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteReply(CommentReply reply, Comment parentComment) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar respuesta'),
+        content: const Text('¿Estás seguro de que deseas eliminar esta respuesta?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () { Navigator.pop(context); _deleteReply(reply, parentComment); },
+            style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error, foregroundColor: Theme.of(context).colorScheme.onError),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteComment(Comment comment) async {
+    if (_commentRepository == null) { _showErrorSnackbar('Error: Sistema de comentarios no disponible'); return; }
+
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
+
+    try {
+      await _commentRepository!.deleteComment(widget.emprendimiento.id, comment.id);
+      if (mounted) Navigator.of(context).pop();
+      setState(() => _comments.removeWhere((c) => c.id == comment.id));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(comment.hasReplies ? 'Comentario y ${comment.replies.length} respuesta(s) eliminados' : 'Comentario eliminado exitosamente'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating));
+    } catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      _showErrorSnackbar('Error al eliminar comentario: ${e.toString()}');
+    }
+  }
+
+  Future<void> _deleteReply(CommentReply reply, Comment parentComment) async {
+    if (_commentRepository == null) { _showErrorSnackbar('Error: Sistema de comentarios no disponible'); return; }
+
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
+
+    try {
+      await _commentRepository!.deleteReply(parentComment.id, reply.id);
+      if (mounted) Navigator.of(context).pop();
+      setState(() {
+        final index = _comments.indexOf(parentComment);
+        if (index != -1) {
+          final updatedReplies = _comments[index].replies.where((r) => r.id != reply.id).toList();
+          _comments[index] = _comments[index].copyWith(replies: updatedReplies);
+        }
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Respuesta eliminada exitosamente'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating));
+    } catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      _showErrorSnackbar('Error al eliminar respuesta: ${e.toString()}');
+    }
+  }
+
+  Widget _buildSection(String title, IconData icon, List<Widget> children) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [BrandColors.lightYellow.withOpacity(0.2), BrandColors.brightYellow.withOpacity(0.1)]),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: BrandColors.gradient, borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: Colors.white, size: 20)),
+                const SizedBox(width: 12),
+                Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.3))),
+              ],
+            ),
+          ),
+          Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    if (value.isEmpty || value == 'null') return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 140, child: Text(label, style: TextStyle(fontSize: 13, color: Colors.grey[700], fontWeight: FontWeight.w600))),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 13, height: 1.4))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailText(String text) => Text(text, style: Theme.of(context).textTheme.bodyMedium);
+
+  Widget _buildFloatingActionButtons() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (_tabController.index == 1) ...[
+          ScaleTransition(
+            scale: _fabAnimation,
+            child: FloatingActionButton(heroTag: 'navigate', onPressed: _openInMaps, child: const Icon(Icons.navigation)),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  // ─── FIX: _toggleFavorite — does NOT touch likesCount ───────────────────────
+  Future<void> _toggleFavorite() async {
+    debugPrint('=== Toggle Favorite Debug ===');
+    debugPrint('Repository ready: $_repositoryReady');
+    debugPrint('Is Guest: $_isGuestUser');
+
+    if (_isGuestUser) {
+      _showLoginPrompt('Por favor ingresa a tu cuenta para agregar a favoritos');
+      return;
+    }
+
+    // ─── FIX: guard against repository not yet ready ────────────────────────
+    if (!_repositoryReady || _repository == null) {
+      _showErrorSnackbar('Cargando... por favor intenta de nuevo en un momento.');
+      return;
+    }
+
+    final hasValidToken = await _ensureValidToken();
+    if (!hasValidToken) {
+      _showErrorSnackbar('Error de autenticación. Inicia sesión nuevamente.');
+      return; // ─── FIX: do NOT auto-logout here; let user retry ──────────────
+    }
+
+    final originalFavoritedState = _isFavoritedNotifier.value;
+
+    try {
+      // Optimistic update — ONLY favorites, NOT likes or likesCount
+      //_isFavoritedNotifier.value = !_isFavoritedNotifier.value;
+      _isFavoritedNotifier.value = !originalFavoritedState;
+      _likesCountNotifier.value += originalFavoritedState ? -1 : 1;
+
+      setState(() {
+        _currentEmprendimiento = _currentEmprendimiento.copyWith(
+          isFavoritedByUser: _isFavoritedNotifier.value,
+        );
+      });
+
+      final success = await _repository!.toggleLike(
+        _currentEmprendimiento.id,
+        _authToken!,
+      );
+
+      if (!success) {
+        // Revert favorites only
+        _isFavoritedNotifier.value = originalFavoritedState;
+        setState(() {
+          _currentEmprendimiento = _currentEmprendimiento.copyWith(
+            isFavoritedByUser: originalFavoritedState,
+          );
+        });
+        _showErrorSnackbar('Error al actualizar favoritos');
+      }
+    } catch (e) {
+      // Revert favorites only
+      _isFavoritedNotifier.value = originalFavoritedState;
+      _likesCountNotifier.value += originalFavoritedState ? 1 : -1;
+      setState(() {
+        _currentEmprendimiento = _currentEmprendimiento.copyWith(
+          isFavoritedByUser: originalFavoritedState,
+        );
+      });
+
+      debugPrint('Toggle favorite error: $e');
+
+      final errorMessage = e.toString().toLowerCase();
+
+      if (errorMessage.contains('token') ||
+          errorMessage.contains('401') ||
+          errorMessage.contains('unauthorized')) {
+        // ─── FIX: clear token but do NOT force logout/navigate ────────────────
+        _authToken = null;
+        _showErrorSnackbar('Sesión expirada. Por favor inicia sesión nuevamente.');
+      } else {
+        _showErrorSnackbar('Error al actualizar favoritos: ${e.toString()}');
+      }
+    }
+  }
+
+  Future<void> _toggleCommentLike(Comment comment) async {
+    if (_commentRepository == null) { _showErrorSnackbar('Error: Sistema de comentarios no disponible'); return; }
+
+    try {
+      setState(() {
+        final index = _comments.indexOf(comment);
+        if (index != -1) {
+          _comments[index] = _comments[index].copyWith(
+            isLikedByUser: !_comments[index].isLikedByUser,
+            likesCount: _comments[index].likesCount + (_comments[index].isLikedByUser ? -1 : 1),
+          );
+        }
+      });
+      await _commentRepository!.toggleCommentLike(comment.id);
+    } catch (e) {
+      setState(() {
+        final index = _comments.indexOf(comment);
+        if (index != -1) {
+          _comments[index] = _comments[index].copyWith(
+            isLikedByUser: !_comments[index].isLikedByUser,
+            likesCount: _comments[index].likesCount + (_comments[index].isLikedByUser ? 1 : -1),
+          );
+        }
+      });
+      _showErrorSnackbar('Error al actualizar like: ${e.toString()}');
+    }
+  }
+
+  void _makePhoneCall() async {
+    final uri = Uri.parse('tel:${widget.emprendimiento.telefono}');
+    try {
+      if (await canLaunchUrl(uri)) await launchUrl(uri);
+      else _showErrorSnackbar('No se puede realizar la llamada');
+    } catch (e) { _showErrorSnackbar('Error al intentar llamar: $e'); }
+  }
+
+  void _sendWhatsApp() async {
+    final phoneNumber = widget.emprendimiento.telefono.replaceAll(RegExp(r'[^\d]'), '');
+    final message = 'Hola, me interesa conocer más sobre ${widget.emprendimiento.nombre}. Vi su información y me gustaría obtener más detalles.';
+    final uri = Uri.parse('https://wa.me/593$phoneNumber?text=${Uri.encodeComponent(message)}');
+    try {
+      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+      else _showErrorSnackbar('No se puede abrir WhatsApp');
+    } catch (e) { _showErrorSnackbar('Error al abrir WhatsApp: $e'); }
+  }
+
+  void _openInMaps() async {
+    final lat = widget.emprendimiento.latitude;
+    final lng = widget.emprendimiento.longitude;
+    final label = Uri.encodeComponent(widget.emprendimiento.nombre);
+    final uri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng&query_place_id=$label');
+    try {
+      if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
+      else _showErrorSnackbar('No se puede abrir el mapa');
+    } catch (e) { _showErrorSnackbar('Error al abrir el mapa: $e'); }
+  }
+
+  void _copyCoordinates() {
+    Clipboard.setData(ClipboardData(text: '${widget.emprendimiento.latitude}, ${widget.emprendimiento.longitude}'));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coordenadas copiadas al portapapeles'), behavior: SnackBarBehavior.floating));
+  }
+
+  // Método anterior (puedes borrarlo o comentarlo)
+/* void _copyCoordinates() {
+  Clipboard.setData(ClipboardData(text: '${widget.emprendimiento.latitude}, ${widget.emprendimiento.longitude}'));
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Coordenadas copiadas al portapapeles'), behavior: SnackBarBehavior.floating));
+} 
+*/
+
+// Nuevo método para compartir
+void _shareLocation() {
+  final String nombre = widget.emprendimiento.nombre;
+  final double lat = widget.emprendimiento.latitude;
+  final double lng = widget.emprendimiento.longitude;
+  
+  // Creamos un enlace de Google Maps para que el receptor pueda abrirlo directamente
+  final String googleMapsUrl = 'https://www.google.com/maps/search/?api=1&query=$lat,$lng';
+  
+  final String message = '¡Mira este lugar en EmprendeGastroLoja!\n\n'
+      '📍 *$nombre*\n'
+      'Ubicación: ${widget.emprendimiento.sector}, ${widget.emprendimiento.parroquia}\n\n'
+      'Ver en el mapa:\n$googleMapsUrl';
+
+  // Esto abrirá el menú nativo de compartir
+  ShareParams params = ShareParams(
+    text: message,
+    subject: 'Ubicación de $nombre',
+  );
+  SharePlus.instance.share(params);
+
+}
+
+  void _showLoginPrompt(String action) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: Icon(Icons.login, size: 48, color: Theme.of(context).colorScheme.primary),
+        title: const Text('Inicia sesión'),
+        content: Text('Necesitas iniciar sesión para $action.\n\nCrea una cuenta gratis para acceder a todas las funciones.', textAlign: TextAlign.center),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () { Navigator.pop(context); Navigator.pushReplacementNamed(context, '/login'); },
+            child: const Text('Iniciar sesión'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRatingDialog() {
+    if (_isGuestUser) { _showLoginPrompt('escribir una reseña'); return; }
+    if (_commentRepository == null) { _showErrorSnackbar('Sistema de comentarios no disponible'); return; }
+
+    final commentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Escribir reseña'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 16),
+                TextField(
+                  controller: commentController,
+                  onChanged: (value) => setDialogState(() {}),
+                  decoration: const InputDecoration(hintText: 'Escribe tu comentario...', border: OutlineInputBorder()),
+                  maxLines: 4, maxLength: 500,
+                  textCapitalization: TextCapitalization.sentences,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+            ElevatedButton(
+              onPressed: commentController.text.trim().isNotEmpty
+                  ? () async { final comment = commentController.text.trim(); Navigator.pop(context); await _submitRating(comment); }
+                  : null,
+              child: const Text('Enviar'),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) => commentController.dispose());
+  }
+
+  void _showReplyDialog(Comment comment) {
+    if (_isGuestUser) { _showLoginPrompt('responder comentarios'); return; }
+
+    final replyController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Responder a ${comment.userName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)),
+              child: Text(comment.content, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant), maxLines: 2, overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: replyController,
+              decoration: const InputDecoration(hintText: 'Escribe tu respuesta...', border: OutlineInputBorder()),
+              maxLines: 3, maxLength: 300, autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () { if (replyController.text.trim().isNotEmpty) { _submitReply(comment, replyController.text.trim()); Navigator.pop(context); } },
+            child: const Text('Responder'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitRating(String comment) async {
+    if (_commentRepository == null) { _showErrorSnackbar('Error: Sistema de comentarios no disponible'); return; }
+
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
+
+    try {
+      final newComment = await _commentRepository!.createComment(widget.emprendimiento.id, comment);
+      if (mounted) Navigator.of(context).pop();
+      setState(() => _comments.insert(0, newComment));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reseña enviada exitosamente'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating));
+    } catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      _showErrorSnackbar('Error al enviar reseña: ${e.toString()}');
+    }
+  }
+
+  Future<void> _submitReply(Comment comment, String replyText) async {
+    if (_commentRepository == null) { _showErrorSnackbar('Error: Sistema de comentarios no disponible'); return; }
+
+    showDialog(context: context, barrierDismissible: false, builder: (context) => const Center(child: CircularProgressIndicator()));
+
+    try {
+      final newReply = await _commentRepository!.createReply(comment.id, replyText);
+      if (mounted) Navigator.of(context).pop();
+      setState(() {
+        final index = _comments.indexOf(comment);
+        if (index != -1) _comments[index] = _comments[index].copyWith(replies: [..._comments[index].replies, newReply]);
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Respuesta enviada exitosamente'), backgroundColor: Colors.green, behavior: SnackBarBehavior.floating));
+    } catch (e) {
+      if (mounted) Navigator.of(context).pop();
+      _showErrorSnackbar('Error al enviar respuesta: ${e.toString()}');
+    }
+  }
+
+  void _showErrorSnackbar(String message) {
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(message),
+        backgroundColor: Theme.of(context).colorScheme.error,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ));
+    });
+  }
+}
+
+// ─── Fullscreen map page (unchanged) ────────────────────────────────────────
+class _FullscreenMapPage extends StatefulWidget {
+  final Emprendimiento emprendimiento;
+  final VoidCallback onDirections;
+  final VoidCallback onCopy;
+
+  const _FullscreenMapPage({required this.emprendimiento, required this.onDirections, required this.onCopy});
+
+  @override
+  State<_FullscreenMapPage> createState() => _FullscreenMapPageState();
+}
+
+class _FullscreenMapPageState extends State<_FullscreenMapPage> {
+  late final MapController _mapController;
+  String _currentMapStyle = 'osm';
+
+  @override
+  void initState() {
+    super.initState();
+    _mapController = MapController();
+  }
+
+  String _getMapTileUrl() {
+    switch (_currentMapStyle) {
+      case 'topo': return 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
+      case 'osm':
+      default: return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Ubicación - ${widget.emprendimiento.nombre}'),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        elevation: 0,
+        actions: [IconButton(icon: const Icon(Icons.directions), onPressed: widget.onDirections, tooltip: 'Abrir en Google Maps')],
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: LatLng(widget.emprendimiento.latitude, widget.emprendimiento.longitude),
+              initialZoom: 15.0, minZoom: 5.0, maxZoom: 18.0,
+              interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+            ),
+            children: [
+              TileLayer(urlTemplate: _getMapTileUrl(), userAgentPackageName: 'com.example.emprendimientos', maxZoom: 19, maxNativeZoom: 19),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: LatLng(widget.emprendimiento.latitude, widget.emprendimiento.longitude),
+                    width: 50, height: 50,
+                    child: Container(
+                      decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 3))]),
+                      child: const Icon(Icons.restaurant, color: Colors.white, size: 24),
+                    ),
+                  ),
+                ],
+              ),
+              RichAttributionWidget(attributions: [TextSourceAttribution('OpenStreetMap contributors', onTap: () {})]),
+            ],
+          ),
+          Positioned(
+            top: 16, right: 16,
+            child: Column(
+              children: [
+                FloatingActionButton.small(
+                  heroTag: 'map_style',
+                  onPressed: () => setState(() => _currentMapStyle = _currentMapStyle == 'osm' ? 'topo' : 'osm'),
+                  backgroundColor: Colors.white,
+                  child: Icon(_currentMapStyle == 'osm' ? Icons.terrain : Icons.map, color: Theme.of(context).colorScheme.primary),
+                ),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(heroTag: 'zoom_in', onPressed: () => _mapController.move(_mapController.camera.center, _mapController.camera.zoom + 1), backgroundColor: Colors.white, child: Icon(Icons.add, color: Theme.of(context).colorScheme.primary)),
+                const SizedBox(height: 8),
+                FloatingActionButton.small(heroTag: 'zoom_out', onPressed: () => _mapController.move(_mapController.camera.center, _mapController.camera.zoom - 1), backgroundColor: Colors.white, child: Icon(Icons.remove, color: Theme.of(context).colorScheme.primary)),
+              ],
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton(heroTag: 'directions_full', onPressed: widget.onDirections, child: const Icon(Icons.directions)),
+          const SizedBox(height: 12),
+          FloatingActionButton(heroTag: 'copy_coords', onPressed: widget.onCopy, child: const Icon(Icons.copy)),
+          const SizedBox(height: 12),
+          FloatingActionButton(heroTag: 'center', onPressed: () => _mapController.move(LatLng(widget.emprendimiento.latitude, widget.emprendimiento.longitude), 15.0), child: const Icon(Icons.my_location)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Fullscreen carousel page (unchanged) ───────────────────────────────────
+class _FullscreenCarouselPage extends StatefulWidget {
+  final List<String> images;
+  final int initialIndex;
+
+  const _FullscreenCarouselPage({required this.images, required this.initialIndex});
+
+  @override
+  State<_FullscreenCarouselPage> createState() => _FullscreenCarouselPageState();
+}
+
+class _FullscreenCarouselPageState extends State<_FullscreenCarouselPage> {
+  late int _currentIndex;
+  late CarouselSliderController _carouselController;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _carouselController = CarouselSliderController();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text('${_currentIndex + 1} / ${widget.images.length}', style: const TextStyle(color: Colors.white)),
+        centerTitle: true,
+      ),
+      body: Stack(
+        children: [
+          Center(
+            child: CarouselSlider(
+              carouselController: _carouselController,
+              options: CarouselOptions(
+                height: MediaQuery.of(context).size.height,
+                viewportFraction: 1.0,
+                enableInfiniteScroll: widget.images.length > 1,
+                initialPage: widget.initialIndex,
+                onPageChanged: (index, reason) => setState(() => _currentIndex = index),
+              ),
+              items: widget.images.map((imageUrl) {
+                return Builder(
+                  builder: (BuildContext context) {
+                    return InteractiveViewer(
+                      panEnabled: true, minScale: 0.5, maxScale: 4.0,
+                      child: Image.network(
+                        imageUrl, fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.error, color: Colors.white, size: 64)),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(child: CircularProgressIndicator(value: loadingProgress.expectedTotalBytes != null ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes! : null, color: Colors.white));
+                        },
+                      ),
+                    );
+                  },
+                );
+              }).toList(),
+            ),
+          ),
+          if (widget.images.length > 1) ...[
+            Positioned(left: 16, top: 0, bottom: 0, child: Center(child: IconButton(icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 32), onPressed: () => _carouselController.previousPage()))),
+            Positioned(right: 16, top: 0, bottom: 0, child: Center(child: IconButton(icon: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 32), onPressed: () => _carouselController.nextPage()))),
+          ],
+          if (widget.images.length > 1)
+            Positioned(
+              bottom: 32, left: 0, right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: widget.images.asMap().entries.map((entry) {
+                  return Container(
+                    width: 8, height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: _currentIndex == entry.key ? Colors.white : Colors.white.withValues(alpha: 0.4)),
                   );
                 }).toList(),
               ),

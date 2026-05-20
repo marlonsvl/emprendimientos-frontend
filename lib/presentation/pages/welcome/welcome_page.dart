@@ -280,17 +280,17 @@ class WelcomePage extends StatelessWidget {
         Text(
           'EmprendeGastroLoja',
           style: TextStyle(
-            fontSize: _getAdaptiveFontSize(46, config),
+            fontSize: _getAdaptiveFontSize(35, config),
             fontWeight: FontWeight.w900,
             color: Colors.white,
             letterSpacing: 1.5,
             height: 1.0,
             shadows: const [
-              Shadow(
+              /*Shadow(
                 color: Colors.black87,
                 offset: Offset(0, 4),
                 blurRadius: 20,
-              ),
+              ),*/
               Shadow(
                 color: Colors.black45,
                 offset: Offset(0, 2),
@@ -314,6 +314,11 @@ class WelcomePage extends StatelessWidget {
               letterSpacing: 0.5,
               height: 1.5,
               shadows: const [
+                Shadow(
+                color: Colors.black87,
+                offset: Offset(0, 4),
+                blurRadius: 20,
+              ),
                 Shadow(
                   color: Colors.black38,
                   offset: Offset(0, 1),

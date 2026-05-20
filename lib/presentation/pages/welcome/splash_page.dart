@@ -672,17 +672,17 @@ class _SplashPageState extends State<SplashPage>
             const Text(
               'EmprendeGastroLoja',
               style: TextStyle(
-                fontSize: 48,
+                fontSize: 30,
                 fontWeight: FontWeight.w900,
                 color: Colors.white,
                 letterSpacing: 2.0,
                 height: 1.0,
                 shadows: [
-                  Shadow(
+                  /*Shadow(
                     color: Colors.black87,
                     offset: Offset(0, 4),
                     blurRadius: 20,
-                  ),
+                  ),*/
                   Shadow(
                     color: Colors.black45,
                     offset: Offset(0, 2),

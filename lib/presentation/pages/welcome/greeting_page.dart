@@ -75,7 +75,7 @@ class _GreetingPageState extends State<GreetingPage>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    //final theme = Theme.of(context);
     final size = MediaQuery.of(context).size;
     final isSmallScreen = size.height < 700;
 
@@ -199,11 +199,11 @@ class _GreetingPageState extends State<GreetingPage>
                           color: Colors.white.withValues(alpha: 0.9),
                           letterSpacing: 0.5,
                           shadows: const [
-                            Shadow(
+                            /*Shadow(
                               color: Colors.black54,
                               offset: Offset(0, 2),
                               blurRadius: 8,
-                            ),
+                            ),*/
                           ],
                         ),
                         textAlign: TextAlign.center,
@@ -216,7 +216,7 @@ class _GreetingPageState extends State<GreetingPage>
                       Text(
                         'EmprendeGastroLoja',
                         style: TextStyle(
-                          fontSize: isSmallScreen ? 26 : 36,
+                          fontSize: isSmallScreen ? 20 : 30,
                           fontWeight: FontWeight.w900,
                           color: Colors.white,
                           letterSpacing: 1.5,
@@ -244,7 +244,7 @@ class _GreetingPageState extends State<GreetingPage>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 24),
                         child: Text(
-                          '¡Ya está todo listo! Exploremos los emprendimientos culinarios más innovadores y descubramos juntos experiencias gastronómicas increíbles.',
+                          '¡Ya está todo listo! Exploremos los emprendimientos culinarios más innovadores.',
                           style: TextStyle(
                             fontSize: isSmallScreen ? 14 : 15,
                             fontWeight: FontWeight.w600,
@@ -303,7 +303,7 @@ class _GreetingPageState extends State<GreetingPage>
             context,
             Icons.trending_up,
             'Explora',
-            'Los mejores emprendimientos',
+            'Los emprendimientos',
             isSmallScreen,
           ),
           const SizedBox(height: 24),
@@ -332,7 +332,7 @@ class _GreetingPageState extends State<GreetingPage>
             context,
             Icons.trending_up,
             'Explora',
-            'Los mejores emprendimientos',
+            'Los emprendimientos',
             isSmallScreen,
           ),
           _buildFeatureItem(
