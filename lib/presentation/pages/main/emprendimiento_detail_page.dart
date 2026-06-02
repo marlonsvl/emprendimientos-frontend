@@ -4108,6 +4108,7 @@ class _EmprendimientoDetailPageState extends State<EmprendimientoDetailPage>
                     _buildDetailRow('Capacidad total', '${widget.emprendimiento.plazas} personas'),
                     _buildDetailRow('Baños disponibles', widget.emprendimiento.banio),
                     _buildDetailRow('Tiempo trabajando', '${widget.emprendimiento.tiempoTrabajando} años'),
+                    _buildDetailRow('Medio de pago', widget.emprendimiento.medio_pago),
                   ]),
                 ]),
               ),

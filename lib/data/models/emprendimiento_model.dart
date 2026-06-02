@@ -47,6 +47,7 @@ class Emprendimiento {
   final double longitude;
   final double latitude;
   final String horario;
+  final String medio_pago;
   final String categoria;
   final String photoUrl;
   final String? videoUrl;
@@ -109,6 +110,7 @@ class Emprendimiento {
     required this.longitude,
     required this.latitude,
     required this.horario,
+    required this.medio_pago,
     required this.categoria,
     required this.photoUrl,
     this.videoUrl,
@@ -171,6 +173,7 @@ class Emprendimiento {
       longitude: double.tryParse(json['longitude'].toString()) ?? 0.0,
       latitude: double.tryParse(json['latitude'].toString()) ?? 0.0,
       horario: json['horario'] ?? '',
+      medio_pago: json['medio_pago'] ?? '',
       categoria: json['categoria'] ?? '',
       photoUrl: json['photo_url'] ?? 'https://picsum.photos/300/200',
       videoUrl: json['video_url'],
@@ -234,6 +237,7 @@ class Emprendimiento {
       'longitude': longitude,
       'latitude': latitude,
       'horario': horario,
+      'medio_pago': medio_pago,
       'categoria': categoria,
       'photo_url': photoUrl,
       'video_url': videoUrl,
@@ -362,6 +366,7 @@ class Emprendimiento {
       photoUrl: photoUrl,
       videoUrl: videoUrl,
       galleryUrls: galleryUrls,
+      medio_pago: medio_pago,
       likesCount: likesCount ?? this.likesCount,
       commentsCount: commentsCount ?? this.commentsCount,
       ratingCount: ratingCount ?? this.ratingCount,
